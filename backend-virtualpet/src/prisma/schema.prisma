@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["user", "auth"]
+}
+
+enum Role {
+  CLIENT
+  BACKOFFICE
+
+  @@schema("user")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  username     String   @unique
+  role         Role     @default(CLIENT)
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  addresses Address[]
+
+  @@map("user")
+  @@schema("user")
+}
+
+model Address {
+  id         String  @id @default(uuid())
+  userId     String  @map("user_id")
+  street     String
+  number     String?
+  apartment  String?
+  city       String
+  province   String
+  postalCode String  @map("postal_code")
+  isDefault  Boolean @default(false) @map("is_default")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("address")
+  @@schema("user")
+}
+
+// Sin @relation: userId es campo plano, no FK entre schemas.
+// La validación del usuario se hace a nivel de aplicación en AuthService.
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_token")
+  @@schema("auth")
+}
