@@ -43,6 +43,10 @@ export class UserService implements IUserService {
     });
   }
 
+  updatePassword(id: string, passwordHash: string): Promise<User> {
+    return this.userRepository.updatePassword(id, passwordHash);
+  }
+
   async update(id: string, dto: UpdateProfileDto): Promise<User> {
     const user = await this.userRepository.findById(id);
     if (!user) throw new NotFoundException('Usuario no encontrado');

@@ -10,4 +10,5 @@ export interface IUserService {
   findAll(): Promise<User[]>;
   create(dto: CreateUserDto): Promise<User>;
   update(id: string, dto: UpdateProfileDto): Promise<User>;
+  updatePassword(id: string, passwordHash: string): Promise<User>;
 }
