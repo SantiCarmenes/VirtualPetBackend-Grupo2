@@ -10,12 +10,16 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
-const cookieOptions = {
+const cookieBase = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
-  maxAge: 15 * 60 * 1000, // 15 minutos
   path: '/',
+};
+
+const cookieOptions = {
+  ...cookieBase,
+  maxAge: 15 * 60 * 1000, // 15 minutos
 };
 
 @Controller('auth')
@@ -65,7 +69,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.authService.logout(dto.refreshToken);
-    res.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
+    res.clearCookie(ACCESS_TOKEN_COOKIE, cookieBase);
   }
 
   @Public()

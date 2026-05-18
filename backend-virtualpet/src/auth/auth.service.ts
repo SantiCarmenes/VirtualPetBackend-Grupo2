@@ -10,7 +10,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hora
 
 export interface AuthTokens {
@@ -36,12 +36,12 @@ export class AuthService {
     const user = await this.userService.findByEmail(dto.email);
 
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException('Email o contraseña incorrectos.');
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatch) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException('Email o contraseña incorrectos.');
     }
 
     return this.generateTokens(user);
