@@ -23,20 +23,16 @@ export class UserService implements IUserService {
   }
 
   async create(dto: CreateUserDto): Promise<User> {
-    const [emailInUse, usernameInUse] = await Promise.all([
-      this.userRepository.findByEmail(dto.email),
-      this.userRepository.findByUsername(dto.username),
-    ]);
-
+    const emailInUse = await this.userRepository.findByEmail(dto.email);
     if (emailInUse) throw new ConflictException('El email ya está en uso');
-    if (usernameInUse) throw new ConflictException('El username ya está en uso');
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const username = `${dto.email.split('@')[0]}-${Date.now().toString(36)}`;
 
     return this.userRepository.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
-      username: dto.username,
+      username,
       email: dto.email,
       passwordHash,
       role: dto.role ?? 'CLIENT',
@@ -51,17 +47,9 @@ export class UserService implements IUserService {
     const user = await this.userRepository.findById(id);
     if (!user) throw new NotFoundException('Usuario no encontrado');
 
-    if (dto.username) {
-      const usernameInUse = await this.userRepository.findByUsername(dto.username);
-      if (usernameInUse && usernameInUse.id !== id) {
-        throw new ConflictException('El username ya está en uso');
-      }
-    }
-
     return this.userRepository.update(id, {
       firstName: dto.firstName,
       lastName: dto.lastName,
-      username: dto.username,
     });
   }
 }

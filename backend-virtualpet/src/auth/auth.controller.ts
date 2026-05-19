@@ -1,5 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -7,20 +6,6 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-
-const ACCESS_TOKEN_COOKIE = 'access_token';
-
-const cookieBase = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-};
-
-const cookieOptions = {
-  ...cookieBase,
-  maxAge: 15 * 60 * 1000, // 15 minutos
-};
 
 @Controller('auth')
 export class AuthController {
@@ -30,11 +15,8 @@ export class AuthController {
   @Post('register')
   async register(
     @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ refreshToken: string }> {
-    const tokens = await this.authService.register(dto);
-    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, cookieOptions);
-    return { refreshToken: tokens.refreshToken };
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    return this.authService.register(dto);
   }
 
   @Public()
@@ -42,11 +24,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ refreshToken: string }> {
-    const tokens = await this.authService.login(dto);
-    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, cookieOptions);
-    return { refreshToken: tokens.refreshToken };
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    return this.authService.login(dto);
   }
 
   @Public()
@@ -54,22 +33,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Body() dto: RefreshTokenDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<{ refreshToken: string }> {
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const tokens = await this.authService.refresh(dto.refreshToken);
-    res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, cookieOptions);
-    return { refreshToken: tokens.refreshToken };
+    return tokens;
   }
 
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(
-    @Body() dto: RefreshTokenDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
+  async logout(@Body() dto: RefreshTokenDto): Promise<void> {
     await this.authService.logout(dto.refreshToken);
-    res.clearCookie(ACCESS_TOKEN_COOKIE, cookieBase);
   }
 
   @Public()

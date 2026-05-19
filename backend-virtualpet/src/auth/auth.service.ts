@@ -4,6 +4,7 @@ import type { User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { MailService } from '../mail/mail.service';
+import { OrderService } from '../order/services/order.service';
 import { UserService } from '../user/user.service';
 import { AuthRepository } from './auth.repository';
 import { LoginDto } from './dto/login.dto';
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
+    private readonly orderService: OrderService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -43,6 +45,8 @@ export class AuthService {
     if (!passwordMatch) {
       throw new UnauthorizedException('Email o contraseña incorrectos.');
     }
+
+    void this.orderService.claimGuestOrders(user.email, user.id);
 
     return this.generateTokens(user);
   }

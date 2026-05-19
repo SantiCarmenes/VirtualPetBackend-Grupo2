@@ -51,51 +51,94 @@ export class CatalogRepository {
   // ─── Products ─────────────────────────────────────────────────────────────
 
   async findAllProducts(filters: FilterProductsDto) {
-    const where: Prisma.ProductWhereInput = {};
+    const where: Prisma.ProductWhereInput = { active: true };
 
-    if (filters.categoryId) where.categoryId = filters.categoryId;
-    if (filters.active !== undefined) where.active = filters.active;
-
-    if (filters.search) {
+    if (filters.categoryIds?.length) {
+      // Incluye productos de las categorías seleccionadas Y de sus hijos directos.
+      // Usa filtros de relación en un solo query en lugar de múltiples roundtrips.
       where.OR = [
-        { name: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
+        { categoryId: { in: filters.categoryIds } },
+        { category: { parentId: { in: filters.categoryIds } } },
       ];
     }
+    if (filters.active !== undefined) where.active = filters.active;
 
-    if (filters.attributeValueIds?.length) {
-      where.variants = {
-        some: {
-          active: true,
-          variantAttributes: {
-            some: { attributeValueId: { in: filters.attributeValueIds } },
-          },
-        },
-      };
+    // Full-text search con to_tsvector (soporta stemming en español)
+    // Requiere índice GIN: CREATE INDEX ON catalog.product USING GIN (to_tsvector('spanish', name || ' ' || COALESCE(description,'')));
+    if (filters.search) {
+      const matchIds = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM catalog.product
+        WHERE to_tsvector('spanish', name || ' ' || COALESCE(description, ''))
+              @@ plainto_tsquery('spanish', ${filters.search})
+          AND active = true
+      `;
+      if (matchIds.length === 0) {
+        const page  = filters.page  ?? 1;
+        const limit = filters.limit ?? 20;
+        return { data: [], total: 0, page, limit, totalPages: 0 };
+      }
+      where.id = { in: matchIds.map((r) => r.id) };
     }
 
-    const page = filters.page ?? 1;
+    // Merge filtro de atributos + rango de precio en la cláusula variants
+    const hasAttrFilter  = !!filters.attributeValueIds?.length;
+    const hasPriceFilter = filters.minPrice !== undefined || filters.maxPrice !== undefined;
+
+    if (hasAttrFilter || hasPriceFilter) {
+      const variantWhere: Record<string, unknown> = { active: true };
+
+      if (hasAttrFilter) {
+        // Agrupar los values por atributo padre: OR dentro del mismo atributo, AND entre atributos distintos.
+        // Ejemplo: sabor=[pollo,salmon] AND material=[acero] → no mezcla sabores con materiales.
+        const attrValues = await this.prisma.attributeValue.findMany({
+          where: { id: { in: filters.attributeValueIds } },
+          select: { id: true, attributeId: true },
+        });
+        const byAttribute = new Map<string, string[]>();
+        for (const av of attrValues) {
+          const group = byAttribute.get(av.attributeId) ?? [];
+          group.push(av.id);
+          byAttribute.set(av.attributeId, group);
+        }
+        variantWhere['AND'] = [...byAttribute.values()].map((ids) => ({
+          variantAttributes: { some: { attributeValueId: { in: ids } } },
+        }));
+      }
+
+      if (hasPriceFilter) {
+        variantWhere['price'] = {
+          ...(filters.minPrice !== undefined && { gte: filters.minPrice }),
+          ...(filters.maxPrice !== undefined && { lte: filters.maxPrice }),
+        };
+      }
+
+      where.variants = { some: variantWhere as Prisma.ProductVariantWhereInput };
+    }
+
+    const page  = filters.page  ?? 1;
     const limit = filters.limit ?? 20;
-    const skip = (page - 1) * limit;
+    const skip  = (page - 1) * limit;
 
     const include = {
       category: { select: { id: true, name: true, slug: true } },
-      images: { where: { isPrimary: true }, take: 1 },
+      images:   { where: { isPrimary: true }, take: 1 },
       variants: {
-        where: { active: true },
+        where:  { active: true },
         select: { id: true, sku: true, price: true, active: true },
       },
     };
 
-    const [data, total] = await Promise.all([
-      this.prisma.product.findMany({ where, include, orderBy: { name: 'asc' }, skip, take: limit }),
+    const orderBy = { name: 'asc' as const };
+
+    const [rawData, total] = await Promise.all([
+      this.prisma.product.findMany({ where, include, orderBy, skip, take: limit }),
       this.prisma.product.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data: rawData, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  findProductBySlug(slug: string) {
+  async findProductBySlug(slug: string) {
     return this.prisma.product.findUnique({
       where: { slug },
       include: {
@@ -145,6 +188,29 @@ export class CatalogRepository {
 
   findVariantById(id: string) {
     return this.prisma.productVariant.findUnique({ where: { id } });
+  }
+
+  async findVariantWithProduct(id: string) {
+    const v = await this.prisma.productVariant.findUnique({
+      where: { id },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            images: { take: 1, orderBy: { id: 'asc' } },
+          },
+        },
+        images: { take: 1, orderBy: { id: 'asc' } },
+        variantAttributes: {
+          include: {
+            attributeValue: { include: { attribute: true } },
+          },
+        },
+      },
+    });
+    return v;
   }
 
   findVariantBySku(sku: string) {

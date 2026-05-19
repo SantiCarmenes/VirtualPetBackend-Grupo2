@@ -1,50 +1,54 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { Public } from '../../auth/decorators/public.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
-import { CatalogService } from '../catalog.service';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { CreateVariantDto } from '../dto/create-variant.dto';
 import { FilterProductsDto } from '../dto/filter-products.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { ProductService } from '../services/product.service';
+import { VariantService } from '../services/variant.service';
 
 @Controller('catalog/products')
 export class CatalogProductController {
-  constructor(private readonly catalogService: CatalogService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly variantService: VariantService,
+  ) {}
 
   @Public()
   @Get()
   findAll(@Query() filters: FilterProductsDto) {
-    return this.catalogService.findAllProducts(filters);
+    return this.productService.findAll(filters);
   }
 
   @Public()
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
-    return this.catalogService.findProductBySlug(slug);
+    return this.productService.findBySlug(slug);
   }
 
   @Roles('BACKOFFICE')
   @Post()
   create(@Body() dto: CreateProductDto) {
-    return this.catalogService.createProduct(dto);
+    return this.productService.create(dto);
   }
 
   @Roles('BACKOFFICE')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
-    return this.catalogService.updateProduct(id, dto);
+    return this.productService.update(id, dto);
   }
 
   @Roles('BACKOFFICE')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   deactivate(@Param('id') id: string) {
-    return this.catalogService.deactivateProduct(id);
+    return this.productService.deactivate(id);
   }
 
   @Roles('BACKOFFICE')
   @Post(':productId/variants')
   createVariant(@Param('productId') productId: string, @Body() dto: CreateVariantDto) {
-    return this.catalogService.createVariant(productId, dto);
+    return this.variantService.createVariant(productId, dto);
   }
 }
