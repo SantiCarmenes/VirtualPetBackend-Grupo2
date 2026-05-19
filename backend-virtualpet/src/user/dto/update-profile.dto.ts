@@ -9,7 +9,4 @@ export class UpdateProfileDto {
   @IsString()
   lastName?: string;
 
-  @IsOptional()
-  @IsString()
-  username?: string;
 }

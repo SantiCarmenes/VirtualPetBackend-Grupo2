@@ -3,20 +3,17 @@ import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validato
 
 export class CreateUserDto {
   @IsString()
-  firstName: string;
+  firstName!: string;
 
   @IsString()
-  lastName: string;
-
-  @IsString()
-  username: string;
+  lastName!: string;
 
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(8)
-  password: string;
+  password!: string;
 
   @IsEnum(Role)
   @IsOptional()
