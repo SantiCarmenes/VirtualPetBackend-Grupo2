@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, Patch, Post, Query } from '@nestjs/common';
 import { Public } from '../../auth/decorators/public.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { CreateProductDto } from '../dto/create-product.dto';
@@ -10,6 +10,8 @@ import { VariantService } from '../services/variant.service';
 
 @Controller('catalog/products')
 export class CatalogProductController {
+  private readonly logger = new Logger(CatalogProductController.name);
+
   constructor(
     private readonly productService: ProductService,
     private readonly variantService: VariantService,
@@ -17,8 +19,11 @@ export class CatalogProductController {
 
   @Public()
   @Get()
-  findAll(@Query() filters: FilterProductsDto) {
-    return this.productService.findAll(filters);
+  async findAll(@Query() filters: FilterProductsDto) {
+    this.logger.log(`GET /catalog/products — filters: ${JSON.stringify(filters)}`);
+    const result = await this.productService.findAll(filters);
+    this.logger.log(`GET /catalog/products — result: total=${result.total} returned=${result.data.length}`);
+    return result;
   }
 
   @Public()

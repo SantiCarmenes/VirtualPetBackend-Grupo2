@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAttributeValueDto } from './dto/create-attribute-value.dto';
@@ -13,6 +13,8 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 
 @Injectable()
 export class CatalogRepository {
+  private readonly logger = new Logger(CatalogRepository.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ─── Categories ──────────────────────────────────────────────────────────
@@ -51,16 +53,33 @@ export class CatalogRepository {
   // ─── Products ─────────────────────────────────────────────────────────────
 
   async findAllProducts(filters: FilterProductsDto) {
+    this.logger.debug(`findAllProducts — filters: ${JSON.stringify(filters)}`);
+
     const where: Prisma.ProductWhereInput = { active: true };
 
     if (filters.categoryIds?.length) {
-      // Incluye productos de las categorías seleccionadas Y de sus hijos directos.
-      // Usa filtros de relación en un solo query en lugar de múltiples roundtrips.
-      where.OR = [
-        { categoryId: { in: filters.categoryIds } },
-        { category: { parentId: { in: filters.categoryIds } } },
-      ];
+      // Expande los IDs seleccionados hacia abajo en el árbol de categorías
+      // para cubrir jerarquías de cualquier profundidad (top → middle → leaf).
+      const childCategories = await this.prisma.category.findMany({
+        where: { parentId: { in: filters.categoryIds } },
+        select: { id: true },
+      });
+      const childIds = childCategories.map((c) => c.id);
+
+      const grandchildCategories = childIds.length
+        ? await this.prisma.category.findMany({
+            where: { parentId: { in: childIds } },
+            select: { id: true },
+          })
+        : [];
+      const grandchildIds = grandchildCategories.map((c) => c.id);
+
+      const allCategoryIds = [...new Set([...filters.categoryIds, ...childIds, ...grandchildIds])];
+      this.logger.debug(`Category expansion — selected: ${filters.categoryIds.length}, children: ${childIds.length}, grandchildren: ${grandchildIds.length}, total: ${allCategoryIds.length}`);
+
+      where.categoryId = { in: allCategoryIds };
     }
+
     if (filters.active !== undefined) where.active = filters.active;
 
     // Full-text search con to_tsvector (soporta stemming en español)
@@ -94,6 +113,7 @@ export class CatalogRepository {
           where: { id: { in: filters.attributeValueIds } },
           select: { id: true, attributeId: true },
         });
+        this.logger.debug(`attributeValue lookup returned ${attrValues.length} rows for ids: ${JSON.stringify(filters.attributeValueIds)}`);
         const byAttribute = new Map<string, string[]>();
         for (const av of attrValues) {
           const group = byAttribute.get(av.attributeId) ?? [];
@@ -103,6 +123,7 @@ export class CatalogRepository {
         variantWhere['AND'] = [...byAttribute.values()].map((ids) => ({
           variantAttributes: { some: { attributeValueId: { in: ids } } },
         }));
+        this.logger.debug(`variantWhere.AND: ${JSON.stringify(variantWhere['AND'])}`);
       }
 
       if (hasPriceFilter) {
@@ -114,6 +135,8 @@ export class CatalogRepository {
 
       where.variants = { some: variantWhere as Prisma.ProductVariantWhereInput };
     }
+
+    this.logger.debug(`Final where clause: ${JSON.stringify(where)}`);
 
     const page  = filters.page  ?? 1;
     const limit = filters.limit ?? 20;
@@ -134,6 +157,8 @@ export class CatalogRepository {
       this.prisma.product.findMany({ where, include, orderBy, skip, take: limit }),
       this.prisma.product.count({ where }),
     ]);
+
+    this.logger.debug(`Query result — total: ${total}, returned: ${rawData.length}`);
 
     return { data: rawData, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
