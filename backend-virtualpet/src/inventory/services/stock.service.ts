@@ -23,10 +23,14 @@ export class StockService implements IStockService {
 
   async checkStockOrThrow(items: { variantId: string; quantity: number }[]) {
     for (const item of items) {
-      const available = await this.inventoryRepository.getTotalAvailable(item.variantId);
-      if (available < item.quantity) {
+      const stockItem = await this.inventoryRepository.findFirstAvailableStockItem(
+        item.variantId,
+        item.quantity,
+      );
+      if (!stockItem) {
+        const available = await this.inventoryRepository.getTotalAvailable(item.variantId);
         throw new UnprocessableEntityException(
-          `Stock insuficiente: hay ${available} unidad${available === 1 ? '' : 'es'} disponible${available === 1 ? '' : 's'} pero se requieren ${item.quantity}.`,
+          `Stock insuficiente: se requieren ${item.quantity} unidades desde un mismo almacén pero el máximo disponible es ${available}.`,
         );
       }
     }

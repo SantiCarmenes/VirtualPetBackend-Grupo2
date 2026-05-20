@@ -8,7 +8,7 @@ import { UpdateProductDto } from '../dto/update-product.dto';
 export class ProductService {
   constructor(private readonly catalogRepository: CatalogRepository) {}
 
-  findAll(filters: FilterProductsDto) {
+  async findAll(filters: FilterProductsDto) {
     return this.catalogRepository.findAllProducts(filters);
   }
 
