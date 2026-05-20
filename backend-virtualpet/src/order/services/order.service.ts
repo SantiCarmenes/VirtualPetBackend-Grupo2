@@ -280,6 +280,7 @@ export class OrderService implements IOrderService {
 
     if (result === 'approved') {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.APPROVED);
+      await this.updateOrderStatus(orderId, { status: OrderStatus.CONFIRMED });
     } else {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.REJECTED);
       await this.updateOrderStatus(orderId, { status: OrderStatus.CANCELLED });
