@@ -213,10 +213,11 @@ model ProductVariantAttribute {
 // ─── ORDER ──────────────────────────────────────────────────────────────────
 
 enum OrderStatus {
-  PENDING
-  CONFIRMED
-  SHIPPED
+  RECEIVED
+  IN_PREPARATION
+  IN_TRANSIT
   DELIVERED
+  NOT_DELIVERED
   CANCELLED
 
   @@schema("order")
@@ -257,18 +258,21 @@ model Order {
   customerEmail   String      @map("customer_email")
   customerName    String      @map("customer_name")
   shippingAddress Json        @map("shipping_address")
-  status          OrderStatus @default(PENDING)
-  subtotal        Decimal     @db.Decimal(10, 2)
-  shippingCost    Decimal     @db.Decimal(10, 2) @map("shipping_cost")
-  discountTotal   Decimal     @db.Decimal(10, 2) @map("discount_total")
-  total           Decimal     @db.Decimal(10, 2)
-  currency        String      @default("ARS")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  status            OrderStatus @default(RECEIVED)
+  deliveryAttempts  Int         @default(0) @map("delivery_attempts")
+  nextDeliveryAt    DateTime?   @map("next_delivery_at")
+  subtotal          Decimal     @db.Decimal(10, 2)
+  shippingCost      Decimal     @db.Decimal(10, 2) @map("shipping_cost")
+  discountTotal     Decimal     @db.Decimal(10, 2) @map("discount_total")
+  total             Decimal     @db.Decimal(10, 2)
+  currency          String      @default("ARS")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
 
   items             OrderItem[]
   appliedPromotions AppliedPromotion[]
 
+  @@index([status, nextDeliveryAt])
   @@map("order")
   @@schema("order")
 }

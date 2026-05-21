@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -108,6 +108,15 @@ export class OrderRepository {
       this.prisma.order.count(),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  findOrdersPendingReschedule() {
+    return this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.NOT_DELIVERED,
+        nextDeliveryAt: { lte: new Date() },
+      },
+    });
   }
 
   claimGuestOrders(email: string, userId: string) {

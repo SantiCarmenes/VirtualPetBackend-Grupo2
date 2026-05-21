@@ -1,4 +1,5 @@
 ﻿import 'dotenv/config';
+import * as bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import type { SeedProductParams } from './seed-types';
@@ -204,7 +205,34 @@ async function main() {
     },
   });
 
-  console.log('✓ Seed completado: 55 productos + 1 depósito + stock por variante + 1 método de envío.');
+  console.log('Creando usuarios backoffice...');
+  const hash1 = await bcrypt.hash('Admin123!', 10);
+  const hash2 = await bcrypt.hash('Oper123!', 10);
+  await prisma.user.createMany({
+    data: [
+      {
+        firstName: 'Admin',
+        lastName: 'VirtualPet',
+        username: 'admin_vp',
+        email: 'admin@virtualpet.com',
+        passwordHash: hash1,
+        role: 'BACKOFFICE',
+        isActive: true,
+      },
+      {
+        firstName: 'Operador',
+        lastName: 'VirtualPet',
+        username: 'operador_vp',
+        email: 'operador@virtualpet.com',
+        passwordHash: hash2,
+        role: 'BACKOFFICE',
+        isActive: true,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  console.log('✓ Seed completado: 55 productos + 1 depósito + stock por variante + 1 método de envío + 2 usuarios backoffice.');
 }
 
 main()

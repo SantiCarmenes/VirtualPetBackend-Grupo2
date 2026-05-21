@@ -22,6 +22,15 @@ import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { MailService } from '../../mail/mail.service';
 
+const MAX_DELIVERY_ATTEMPTS = 3;
+
+const ALLOWED_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
+  [OrderStatus.IN_PREPARATION]: [OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
+  [OrderStatus.IN_TRANSIT]:     [OrderStatus.DELIVERED, OrderStatus.NOT_DELIVERED],
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
+};
+
 @Injectable()
 export class OrderService implements IOrderService {
   constructor(
@@ -175,7 +184,6 @@ export class OrderService implements IOrderService {
     }
 
     const total = subtotal.add(shippingCost);
-    // userId sin FK → usamos un identificador de invitado
     const guestUserId = `guest-${crypto.randomUUID()}`;
 
     const order = await this.orderRepository.createOrder({
@@ -251,14 +259,48 @@ export class OrderService implements IOrderService {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
 
-    if (dto.status === OrderStatus.CANCELLED) {
-      await this.stockService.releaseReservation(orderId);
-    } else if (dto.status === OrderStatus.SHIPPED) {
+    const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
+    if (!allowed.includes(dto.status)) {
+      throw new BadRequestException(
+        `Transición inválida: ${order.status} → ${dto.status}`,
+      );
+    }
+
+    // Stock: confirmar reserva solo en el primer despacho
+    if (dto.status === OrderStatus.IN_TRANSIT && order.deliveryAttempts === 0) {
       await this.stockService.confirmReservation(orderId);
     }
 
-    const updated = await this.orderRepository.updateOrder(orderId, { status: dto.status });
-    void this.mailService.sendOrderStatusUpdate(updated, dto.status);
+    // Stock: liberar reserva solo si nunca salió a reparto
+    if (dto.status === OrderStatus.CANCELLED && order.deliveryAttempts === 0) {
+      await this.stockService.releaseReservation(orderId);
+    }
+
+    let updateData: Prisma.OrderUpdateInput = { status: dto.status };
+
+    if (dto.status === OrderStatus.NOT_DELIVERED) {
+      const newAttempts = order.deliveryAttempts + 1;
+
+      if (newAttempts >= MAX_DELIVERY_ATTEMPTS) {
+        // Tercer fallo → cancelar automáticamente
+        updateData = {
+          status: OrderStatus.CANCELLED,
+          deliveryAttempts: newAttempts,
+          nextDeliveryAt: null,
+        };
+      } else {
+        const nextDelivery = new Date();
+        nextDelivery.setHours(nextDelivery.getHours() + 24);
+        updateData = {
+          status: OrderStatus.NOT_DELIVERED,
+          deliveryAttempts: newAttempts,
+          nextDeliveryAt: nextDelivery,
+        };
+      }
+    }
+
+    const updated = await this.orderRepository.updateOrder(orderId, updateData);
+    void this.mailService.sendOrderStatusUpdate(updated, updated.status);
     return updated;
   }
 
@@ -280,10 +322,22 @@ export class OrderService implements IOrderService {
 
     if (result === 'approved') {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.APPROVED);
-      await this.updateOrderStatus(orderId, { status: OrderStatus.CONFIRMED });
+      // El pedido ya está en RECEIVED; no se necesita cambio de estado
     } else {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.REJECTED);
-      await this.updateOrderStatus(orderId, { status: OrderStatus.CANCELLED });
+      await this.stockService.releaseReservation(orderId);
+      await this.orderRepository.updateOrder(orderId, { status: OrderStatus.CANCELLED });
+    }
+  }
+
+  async processPendingReschedules(): Promise<void> {
+    const orders = await this.orderRepository.findOrdersPendingReschedule();
+    for (const order of orders) {
+      const updated = await this.orderRepository.updateOrder(order.id, {
+        status: OrderStatus.IN_TRANSIT,
+        nextDeliveryAt: null,
+      });
+      void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
     }
   }
 }

@@ -12,6 +12,7 @@ import { ORDER_SERVICE } from './interfaces/order-service.interface';
 import { PROMOTION_SERVICE } from './interfaces/promotion-service.interface';
 import { OrderRepository } from './order.repository';
 import { CartService } from './services/cart.service';
+import { DeliverySchedulerService } from './services/delivery-scheduler.service';
 import { OrderService } from './services/order.service';
 import { PromotionService } from './services/promotion.service';
 
@@ -23,6 +24,7 @@ import { PromotionService } from './services/promotion.service';
     CartService,
     OrderService,
     PromotionService,
+    DeliverySchedulerService,
     { provide: CART_SERVICE, useClass: CartService },
     { provide: ORDER_SERVICE, useClass: OrderService },
     { provide: PROMOTION_SERVICE, useClass: PromotionService },

@@ -35,8 +35,8 @@ export class PromotionService implements IPromotionService {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
     if (order.userId !== userId) throw new ForbiddenException();
-    if (order.status !== OrderStatus.PENDING) {
-      throw new BadRequestException('Solo se pueden aplicar promociones a órdenes pendientes');
+    if (order.status !== OrderStatus.RECEIVED) {
+      throw new BadRequestException('Solo se pueden aplicar promociones a órdenes recién recibidas');
     }
 
     const promotion = await this.orderRepository.findPromotionByCode(dto.code);
