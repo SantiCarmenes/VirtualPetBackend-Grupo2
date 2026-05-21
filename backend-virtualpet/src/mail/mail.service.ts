@@ -2,19 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 
 const STATUS_LABELS: Record<string, string> = {
-  PENDING:   'Pendiente',
-  CONFIRMED: 'Confirmado',
-  SHIPPED:   'Enviado',
-  DELIVERED: 'Entregado',
-  CANCELLED: 'Cancelado',
+  RECEIVED:       'Recibido',
+  IN_PREPARATION: 'En preparación',
+  IN_TRANSIT:     'En camino',
+  DELIVERED:      'Entregado',
+  NOT_DELIVERED:  'No entregado',
+  CANCELLED:      'Cancelado',
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
-  PENDING:   { bg: '#fef3c7', color: '#78350f' },
-  CONFIRMED: { bg: '#e7e5e4', color: '#1c1917' },
-  SHIPPED:   { bg: '#d6d3d1', color: '#1c1917' },
-  DELIVERED: { bg: '#d1fae5', color: '#065f46' },
-  CANCELLED: { bg: '#fee2e2', color: '#991b1b' },
+  RECEIVED:       { bg: '#fef3c7', color: '#78350f' },
+  IN_PREPARATION: { bg: '#e7e5e4', color: '#1c1917' },
+  IN_TRANSIT:     { bg: '#dbeafe', color: '#1e40af' },
+  DELIVERED:      { bg: '#d1fae5', color: '#065f46' },
+  NOT_DELIVERED:  { bg: '#fef9c3', color: '#713f12' },
+  CANCELLED:      { bg: '#fee2e2', color: '#991b1b' },
 };
 
 const fmt = (amount: unknown) =>
@@ -267,11 +269,12 @@ export class MailService {
     const badge    = STATUS_BADGE[newStatus] ?? { bg: '#f3f4f6', color: '#374151' };
 
     const statusIcons: Record<string, string> = {
-      PENDING:   '🕐',
-      CONFIRMED: '✅',
-      SHIPPED:   '🚚',
-      DELIVERED: '🎉',
-      CANCELLED: '❌',
+      RECEIVED:       '🕐',
+      IN_PREPARATION: '📦',
+      IN_TRANSIT:     '🚚',
+      DELIVERED:      '🎉',
+      NOT_DELIVERED:  '⚠️',
+      CANCELLED:      '❌',
     };
     const icon = statusIcons[newStatus] ?? '📋';
 

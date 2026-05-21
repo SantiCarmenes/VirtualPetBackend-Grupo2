@@ -1,4 +1,5 @@
 import { Body, Controller, DefaultValuePipe, ForbiddenException, Get, HttpCode, HttpStatus, Inject, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { OrderStatus } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Public } from '../../auth/decorators/public.decorator';
@@ -42,13 +43,20 @@ export class OrderController {
     return this.orderService.findMyOrdersPaginated(user.id, page, limit);
   }
 
+  @Get('stats')
+  @Roles('BACKOFFICE')
+  getStats() {
+    return this.orderService.getOrderStats();
+  }
+
   @Get('all')
   @Roles('BACKOFFICE')
   findAllOrders(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('status') status?: OrderStatus,
   ) {
-    return this.orderService.findAllOrdersPaginated(page, limit);
+    return this.orderService.findAllOrdersPaginated(page, limit, status);
   }
 
   @Get(':id')

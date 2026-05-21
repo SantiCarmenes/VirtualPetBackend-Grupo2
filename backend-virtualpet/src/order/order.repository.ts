@@ -86,7 +86,10 @@ export class OrderRepository {
       }),
       this.prisma.order.count({ where: { userId } }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data,
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+    };
   }
 
   async findAllOrders() {
@@ -96,18 +99,47 @@ export class OrderRepository {
     });
   }
 
-  async findAllOrdersPaginated(page: number, limit: number) {
+  async findAllOrdersPaginated(page: number, limit: number, status?: OrderStatus) {
     const skip = (page - 1) * limit;
+    const where: Prisma.OrderWhereInput = status ? { status } : {};
+
     const [data, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
+        where,
         include: { items: true, appliedPromotions: true },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.order.count(),
+      this.prisma.order.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+
+    return {
+      data,
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+    };
+  }
+
+  async countByStatus(): Promise<Record<string, number>> {
+    const groups = await this.prisma.order.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    });
+
+    const counts: Record<string, number> = {
+      RECEIVED: 0,
+      IN_PREPARATION: 0,
+      IN_TRANSIT: 0,
+      DELIVERED: 0,
+      NOT_DELIVERED: 0,
+      CANCELLED: 0,
+    };
+
+    for (const g of groups) {
+      counts[g.status] = g._count._all;
+    }
+
+    return counts;
   }
 
   findOrdersPendingReschedule() {

@@ -15,7 +15,7 @@ import { PAYMENT_SERVICE } from '../../payment/application/ports/inbound/payment
 import type { IPaymentService } from '../../payment/application/ports/inbound/payment-service.port';
 import { SHIPPING_SERVICE } from '../../shipping/application/ports/inbound/shipping-service.port';
 import type { IShippingService } from '../../shipping/application/ports/inbound/shipping-service.port';
-import { CheckoutResult, IOrderService } from '../interfaces/order-service.interface';
+import { CheckoutResult, IOrderService, OrderStats } from '../interfaces/order-service.interface';
 import { OrderRepository } from '../order.repository';
 import { CheckoutDto } from '../dto/checkout.dto';
 import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
@@ -308,8 +308,22 @@ export class OrderService implements IOrderService {
     return this.orderRepository.findAllOrders();
   }
 
-  async findAllOrdersPaginated(page: number, limit: number) {
-    return this.orderRepository.findAllOrdersPaginated(page, limit);
+  async findAllOrdersPaginated(page: number, limit: number, status?: OrderStatus) {
+    return this.orderRepository.findAllOrdersPaginated(page, limit, status);
+  }
+
+  async getOrderStats(): Promise<OrderStats> {
+    const counts = await this.orderRepository.countByStatus();
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    return {
+      RECEIVED:       counts['RECEIVED']       ?? 0,
+      IN_PREPARATION: counts['IN_PREPARATION'] ?? 0,
+      IN_TRANSIT:     counts['IN_TRANSIT']     ?? 0,
+      DELIVERED:      counts['DELIVERED']      ?? 0,
+      NOT_DELIVERED:  counts['NOT_DELIVERED']  ?? 0,
+      CANCELLED:      counts['CANCELLED']      ?? 0,
+      total,
+    };
   }
 
   async claimGuestOrders(email: string, userId: string): Promise<void> {
