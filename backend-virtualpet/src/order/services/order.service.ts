@@ -97,7 +97,8 @@ export class OrderService implements IOrderService {
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);
 
     if (updated.status === OrderStatus.IN_TRANSIT) {
-      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED, dto.trackingNumber).catch(() => {});
+      const tracking = dto.trackingNumber ?? `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED, tracking).catch(() => {});
     } else if (updated.status === OrderStatus.DELIVERED) {
       void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
     }
