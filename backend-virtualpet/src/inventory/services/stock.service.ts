@@ -21,42 +21,14 @@ export class StockService implements IStockService {
     return { variantId, quantityAvailable };
   }
 
-  async checkStockOrThrow(items: { variantId: string; quantity: number }[]) {
-    for (const item of items) {
-      const stockItem = await this.inventoryRepository.findFirstAvailableStockItem(
-        item.variantId,
-        item.quantity,
-      );
-      if (!stockItem) {
-        const available = await this.inventoryRepository.getTotalAvailable(item.variantId);
-        throw new UnprocessableEntityException(
-          `Stock insuficiente: se requieren ${item.quantity} unidades desde un mismo almacén pero el máximo disponible es ${available}.`,
-        );
-      }
-    }
-  }
-
   async reserveStock(orderId: string, items: { variantId: string; quantity: number }[]) {
-    for (const item of items) {
-      const stockItem = await this.inventoryRepository.findFirstAvailableStockItem(
-        item.variantId,
-        item.quantity,
+    const warehouseId = await this.inventoryRepository.findWarehouseForOrder(items);
+    if (!warehouseId) {
+      throw new UnprocessableEntityException(
+        'No hay suficiente stock para completar el pedido.',
       );
-      if (!stockItem) {
-        throw new UnprocessableEntityException(
-          'No hay suficiente stock para completar el pedido.',
-        );
-      }
-      await Promise.all([
-        this.inventoryRepository.decrementAvailable(stockItem.id, item.quantity),
-        this.inventoryRepository.createReservation({
-          variantId: item.variantId,
-          orderId,
-          stockItem: { connect: { id: stockItem.id } },
-          quantity: item.quantity,
-        }),
-      ]);
     }
+    await this.inventoryRepository.atomicReserveFromWarehouse(warehouseId, orderId, items);
   }
 
   async releaseReservation(orderId: string) {

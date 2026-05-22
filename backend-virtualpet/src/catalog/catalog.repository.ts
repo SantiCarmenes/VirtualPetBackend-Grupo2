@@ -238,6 +238,28 @@ export class CatalogRepository {
     return v;
   }
 
+  findVariantsByIds(ids: string[]) {
+    return this.prisma.productVariant.findMany({
+      where: { id: { in: ids } },
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            images: { take: 1, orderBy: { id: 'asc' } },
+          },
+        },
+        images: { take: 1, orderBy: { id: 'asc' } },
+        variantAttributes: {
+          include: {
+            attributeValue: { include: { attribute: true } },
+          },
+        },
+      },
+    });
+  }
+
   findVariantBySku(sku: string) {
     return this.prisma.productVariant.findUnique({ where: { sku } });
   }
@@ -274,6 +296,35 @@ export class CatalogRepository {
       include: { values: { orderBy: { displayOrder: 'asc' } } },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async findFilterableAttributesGroupedByCategory() {
+    const rows = await this.prisma.productAttribute.findMany({
+      where: {
+        product: { active: true },
+        attribute: { filterable: true },
+      },
+      select: {
+        attributeId: true,
+        attribute: { include: { values: { orderBy: { displayOrder: 'asc' } } } },
+        product: { select: { category: { select: { slug: true } } } },
+      },
+    });
+
+    // Group by category slug, deduplicate attributes per category
+    const grouped: Record<string, Record<string, unknown>> = {};
+    for (const row of rows) {
+      const slug = row.product.category.slug;
+      if (!grouped[slug]) grouped[slug] = {};
+      grouped[slug][row.attributeId] = row.attribute;
+    }
+
+    return Object.fromEntries(
+      Object.entries(grouped).map(([slug, attrsById]) => [
+        slug,
+        Object.values(attrsById),
+      ]),
+    );
   }
 
   findAttributeBySlug(slug: string) {

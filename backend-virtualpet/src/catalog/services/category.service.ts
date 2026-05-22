@@ -11,6 +11,10 @@ export class CategoryService {
     return this.catalogRepository.findAllCategories();
   }
 
+  findAttributesByCategory() {
+    return this.catalogRepository.findFilterableAttributesGroupedByCategory();
+  }
+
   async findById(id: string) {
     const category = await this.catalogRepository.findCategoryById(id);
     if (!category) throw new NotFoundException('Categoría no encontrada');

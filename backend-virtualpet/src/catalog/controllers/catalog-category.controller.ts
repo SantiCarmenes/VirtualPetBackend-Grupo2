@@ -16,6 +16,12 @@ export class CatalogCategoryController {
   }
 
   @Public()
+  @Get('attributes')
+  findAttributes() {
+    return this.categoryService.findAttributesByCategory();
+  }
+
+  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.categoryService.findById(id);

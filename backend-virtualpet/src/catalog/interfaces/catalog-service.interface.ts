@@ -17,4 +17,5 @@ export type VariantWithProduct = ProductVariant & {
 
 export interface ICatalogService {
   findVariantById(id: string): Promise<VariantWithProduct | null>;
+  findVariantsByIds(ids: string[]): Promise<VariantWithProduct[]>;
 }

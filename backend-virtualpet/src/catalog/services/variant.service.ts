@@ -12,6 +12,10 @@ export class VariantService implements ICatalogService {
     return this.catalogRepository.findVariantWithProduct(id);
   }
 
+  findVariantsByIds(ids: string[]): Promise<VariantWithProduct[]> {
+    return this.catalogRepository.findVariantsByIds(ids) as Promise<VariantWithProduct[]>;
+  }
+
   async createVariant(productId: string, dto: CreateVariantDto) {
     const product = await this.catalogRepository.findProductById(productId);
     if (!product) throw new NotFoundException('Producto no encontrado');

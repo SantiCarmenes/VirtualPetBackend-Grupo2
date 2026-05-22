@@ -48,34 +48,32 @@ export class OrderService implements IOrderService {
       throw new BadRequestException('El carrito está vacío');
     }
 
-    const itemSnapshots = await Promise.all(
-      cart.items.map(async (item) => {
-        const variant = await this.catalogService.findVariantById(item.variantId);
-        if (!variant) {
-          throw new UnprocessableEntityException(
-            'Uno de los productos en tu carrito ya no está disponible.',
-          );
-        }
-        if (!variant.active) {
-          throw new UnprocessableEntityException(
-            `El producto "${variant.product.name}" ya no está disponible.`,
-          );
-        }
-        const lineTotal = new Prisma.Decimal(item.priceSnapshot).mul(item.quantity);
-        return {
-          variantId: item.variantId,
-          skuSnapshot: variant.sku,
-          productNameSnapshot: variant.product.name,
-          quantity: item.quantity,
-          unitPrice: item.priceSnapshot,
-          lineTotal,
-        };
-      }),
-    );
+    const variantIds = cart.items.map((i) => i.variantId);
+    const variants = await this.catalogService.findVariantsByIds(variantIds);
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    await this.stockService.checkStockOrThrow(
-      cart.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    );
+    const itemSnapshots = cart.items.map((item) => {
+      const variant = variantMap.get(item.variantId);
+      if (!variant) {
+        throw new UnprocessableEntityException(
+          'Uno de los productos en tu carrito ya no está disponible.',
+        );
+      }
+      if (!variant.active) {
+        throw new UnprocessableEntityException(
+          `El producto "${variant.product.name}" ya no está disponible.`,
+        );
+      }
+      const lineTotal = new Prisma.Decimal(item.priceSnapshot).mul(item.quantity);
+      return {
+        variantId: item.variantId,
+        skuSnapshot: variant.sku,
+        productNameSnapshot: variant.product.name,
+        quantity: item.quantity,
+        unitPrice: item.priceSnapshot,
+        lineTotal,
+      };
+    });
 
     const subtotal = itemSnapshots.reduce(
       (acc, i) => acc.add(i.lineTotal),
@@ -112,10 +110,15 @@ export class OrderService implements IOrderService {
       },
     });
 
-    await this.stockService.reserveStock(
-      order.id,
-      cart.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    );
+    try {
+      await this.stockService.reserveStock(
+        order.id,
+        cart.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      );
+    } catch (err) {
+      await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
+      throw err;
+    }
 
     await this.orderRepository.deleteCartItems(cart.id);
 
@@ -143,34 +146,32 @@ export class OrderService implements IOrderService {
       throw new BadRequestException('El carrito está vacío');
     }
 
-    const itemSnapshots = await Promise.all(
-      dto.items.map(async (item) => {
-        const variant = await this.catalogService.findVariantById(item.variantId);
-        if (!variant) {
-          throw new UnprocessableEntityException(
-            'Uno de los productos en tu carrito ya no está disponible.',
-          );
-        }
-        if (!variant.active) {
-          throw new UnprocessableEntityException(
-            `El producto "${variant.product.name}" ya no está disponible.`,
-          );
-        }
-        const lineTotal = new Prisma.Decimal(variant.price.toString()).mul(item.quantity);
-        return {
-          variantId: item.variantId,
-          skuSnapshot: variant.sku,
-          productNameSnapshot: variant.product.name,
-          quantity: item.quantity,
-          unitPrice: variant.price,
-          lineTotal,
-        };
-      }),
-    );
+    const variantIds = dto.items.map((i) => i.variantId);
+    const variants = await this.catalogService.findVariantsByIds(variantIds);
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    await this.stockService.checkStockOrThrow(
-      dto.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    );
+    const itemSnapshots = dto.items.map((item) => {
+      const variant = variantMap.get(item.variantId);
+      if (!variant) {
+        throw new UnprocessableEntityException(
+          'Uno de los productos en tu carrito ya no está disponible.',
+        );
+      }
+      if (!variant.active) {
+        throw new UnprocessableEntityException(
+          `El producto "${variant.product.name}" ya no está disponible.`,
+        );
+      }
+      const lineTotal = new Prisma.Decimal(variant.price.toString()).mul(item.quantity);
+      return {
+        variantId: item.variantId,
+        skuSnapshot: variant.sku,
+        productNameSnapshot: variant.product.name,
+        quantity: item.quantity,
+        unitPrice: variant.price,
+        lineTotal,
+      };
+    });
 
     const subtotal = itemSnapshots.reduce(
       (acc, i) => acc.add(i.lineTotal),
@@ -207,10 +208,15 @@ export class OrderService implements IOrderService {
       },
     });
 
-    await this.stockService.reserveStock(
-      order.id,
-      dto.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-    );
+    try {
+      await this.stockService.reserveStock(
+        order.id,
+        dto.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      );
+    } catch (err) {
+      await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
+      throw err;
+    }
 
     const payment = await this.paymentService.createPayment({
       orderId: order.id,
