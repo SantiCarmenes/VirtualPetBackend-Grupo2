@@ -34,10 +34,10 @@ export class ShippingService implements IShippingService {
     return this.toResponse(result);
   }
 
-  async updateShipmentStatus(orderId: string, status: ShipmentStatusEnum): Promise<ShipmentResponse> {
+  async updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse> {
     const existing = await this.shippingRepository.findShipmentByOrderId(orderId);
     if (!existing) throw new NotFoundException('Envío no encontrado para esta orden');
-    const result = await this.shippingRepository.updateShipmentStatus(orderId, status);
+    const result = await this.shippingRepository.updateShipmentStatus(orderId, status, trackingNumber);
     return this.toResponse(result);
   }
 

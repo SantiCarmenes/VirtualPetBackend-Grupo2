@@ -40,10 +40,10 @@ export class ShippingRepository implements IShippingRepository {
     });
   }
 
-  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum) {
+  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string) {
     return this.p.shipment.update({
       where:   { orderId },
-      data:    { status },
+      data:    { status, ...(trackingNumber ? { trackingNumber } : {}) },
       include: { method: true },
     });
   }

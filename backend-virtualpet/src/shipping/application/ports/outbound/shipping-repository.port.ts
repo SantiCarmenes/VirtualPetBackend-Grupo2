@@ -32,5 +32,5 @@ export interface IShippingRepository {
     estimatedDelivery?: Date;
   }): Promise<ShipmentWithMethod>;
   findShipmentByOrderId(orderId: string): Promise<ShipmentWithMethod | null>;
-  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum): Promise<ShipmentWithMethod>;
+  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentWithMethod>;
 }

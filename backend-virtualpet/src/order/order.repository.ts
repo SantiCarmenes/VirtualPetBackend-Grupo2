@@ -62,7 +62,17 @@ export class OrderRepository {
   findOrderById(id: string) {
     return this.prisma.order.findUnique({
       where: { id },
-      include: { items: true, appliedPromotions: { include: { promotion: true } } },
+      include: {
+        items: true,
+        appliedPromotions: { include: { promotion: true } },
+        statusHistory: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+  }
+
+  addStatusHistory(orderId: string, status: string) {
+    return this.prisma.orderStatusHistory.create({
+      data: { orderId, status: status as never },
     });
   }
 

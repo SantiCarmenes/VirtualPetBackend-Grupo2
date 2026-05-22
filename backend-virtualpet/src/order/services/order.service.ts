@@ -138,6 +138,7 @@ export class OrderService implements IOrderService {
     }
 
     void this.mailService.sendOrderConfirmation(order);
+    void this.orderRepository.addStatusHistory(order.id, OrderStatus.RECEIVED);
 
     return { order, payment };
   }
@@ -234,6 +235,7 @@ export class OrderService implements IOrderService {
     }
 
     void this.mailService.sendOrderConfirmation(order);
+    void this.orderRepository.addStatusHistory(order.id, OrderStatus.RECEIVED);
 
     return { order, payment };
   }
@@ -307,11 +309,11 @@ export class OrderService implements IOrderService {
     }
 
     const updated = await this.orderRepository.updateOrder(orderId, updateData);
+    void this.orderRepository.addStatusHistory(orderId, updated.status);
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);
 
-    // Sync shipment status with order status
     if (updated.status === OrderStatus.IN_TRANSIT) {
-      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED).catch(() => {});
+      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED, dto.trackingNumber).catch(() => {});
     } else if (updated.status === OrderStatus.DELIVERED) {
       void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
     }

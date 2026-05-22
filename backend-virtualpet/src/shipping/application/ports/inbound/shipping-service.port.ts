@@ -20,5 +20,5 @@ export interface IShippingService {
   findShippingMethodById(id: string): Promise<ShippingMethodDto | null>;
   createShipment(dto: CreateShipmentDto): Promise<ShipmentResponse>;
   getShipmentByOrderId(orderId: string): Promise<ShipmentResponse>;
-  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum): Promise<ShipmentResponse>;
+  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse>;
 }

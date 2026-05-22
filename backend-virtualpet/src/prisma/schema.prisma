@@ -285,6 +285,7 @@ model Order {
 
   items             OrderItem[]
   appliedPromotions AppliedPromotion[]
+  statusHistory     OrderStatusHistory[]
 
   @@index([status, nextDeliveryAt])
   @@map("order")
@@ -292,6 +293,19 @@ model Order {
 }
 
 // Sin @relation: variantId es campo plano, no FK al schema catalog.
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String      @map("order_id")
+  status    OrderStatus
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_status_history")
+  @@schema("order")
+}
+
 model OrderItem {
   id                  String  @id @default(uuid())
   orderId             String  @map("order_id")
