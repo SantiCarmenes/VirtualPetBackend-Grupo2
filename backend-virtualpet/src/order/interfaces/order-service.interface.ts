@@ -1,6 +1,4 @@
 import type { Order, OrderStatus } from '@prisma/client';
-import { CheckoutDto } from '../dto/checkout.dto';
-import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 
 export const ORDER_SERVICE = 'ORDER_SERVICE';
@@ -44,8 +42,6 @@ export interface OrderStats {
 }
 
 export interface IOrderService {
-  checkout(userId: string, dto: CheckoutDto): Promise<CheckoutResult>;
-  guestCheckout(dto: GuestCheckoutDto): Promise<CheckoutResult>;
   findMyOrders(userId: string): Promise<Order[]>;
   findMyOrdersPaginated(userId: string, page: number, limit: number): Promise<PaginatedOrders>;
   findOrderById(orderId: string): Promise<Order & { payment: unknown; shipment: unknown }>;

@@ -70,9 +70,9 @@ export class OrderRepository {
     });
   }
 
-  addStatusHistory(orderId: string, status: string) {
+  addStatusHistory(orderId: string, status: OrderStatus) {
     return this.prisma.orderStatusHistory.create({
-      data: { orderId, status: status as never },
+      data: { orderId, status },
     });
   }
 

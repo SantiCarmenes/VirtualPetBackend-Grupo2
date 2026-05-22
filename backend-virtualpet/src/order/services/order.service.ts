@@ -3,12 +3,9 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { PaymentStatusEnum } from '../../payment/domain/payment-status.enum';
-import { CATALOG_SERVICE } from '../../catalog/interfaces/catalog-service.interface';
-import type { ICatalogService } from '../../catalog/interfaces/catalog-service.interface';
 import { STOCK_SERVICE } from '../../inventory/interfaces/stock-service.interface';
 import type { IStockService } from '../../inventory/interfaces/stock-service.interface';
 import { PAYMENT_SERVICE } from '../../payment/application/ports/inbound/payment-service.port';
@@ -16,20 +13,18 @@ import type { IPaymentService } from '../../payment/application/ports/inbound/pa
 import { SHIPPING_SERVICE } from '../../shipping/application/ports/inbound/shipping-service.port';
 import type { IShippingService } from '../../shipping/application/ports/inbound/shipping-service.port';
 import { ShipmentStatusEnum } from '../../shipping/domain/shipment-status.enum';
-import { CheckoutResult, IOrderService, OrderStats } from '../interfaces/order-service.interface';
-import { OrderRepository } from '../order.repository';
-import { CheckoutDto } from '../dto/checkout.dto';
-import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
-import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { MailService } from '../../mail/mail.service';
+import { OrderRepository } from '../order.repository';
+import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import type { IOrderService, OrderStats } from '../interfaces/order-service.interface';
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
 const ALLOWED_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
-  [OrderStatus.IN_PREPARATION]: [OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
-  [OrderStatus.IN_TRANSIT]:     [OrderStatus.DELIVERED, OrderStatus.NOT_DELIVERED],
-  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.IN_TRANSIT, OrderStatus.CANCELLED],
+  [OrderStatus.IN_PREPARATION]: [OrderStatus.IN_TRANSIT,     OrderStatus.CANCELLED],
+  [OrderStatus.IN_TRANSIT]:     [OrderStatus.DELIVERED,      OrderStatus.NOT_DELIVERED],
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.IN_TRANSIT,     OrderStatus.CANCELLED],
 };
 
 @Injectable()
@@ -37,208 +32,10 @@ export class OrderService implements IOrderService {
   constructor(
     private readonly orderRepository: OrderRepository,
     private readonly mailService: MailService,
-    @Inject(CATALOG_SERVICE) private readonly catalogService: ICatalogService,
-    @Inject(STOCK_SERVICE) private readonly stockService: IStockService,
-    @Inject(PAYMENT_SERVICE) private readonly paymentService: IPaymentService,
+    @Inject(STOCK_SERVICE)    private readonly stockService: IStockService,
+    @Inject(PAYMENT_SERVICE)  private readonly paymentService: IPaymentService,
     @Inject(SHIPPING_SERVICE) private readonly shippingService: IShippingService,
   ) {}
-
-  async checkout(userId: string, dto: CheckoutDto): Promise<CheckoutResult> {
-    const cart = await this.orderRepository.findCartByUserId(userId);
-    if (!cart || cart.items.length === 0) {
-      throw new BadRequestException('El carrito está vacío');
-    }
-
-    const variantIds = cart.items.map((i) => i.variantId);
-    const variants = await this.catalogService.findVariantsByIds(variantIds);
-    const variantMap = new Map(variants.map((v) => [v.id, v]));
-
-    const itemSnapshots = cart.items.map((item) => {
-      const variant = variantMap.get(item.variantId);
-      if (!variant) {
-        throw new UnprocessableEntityException(
-          'Uno de los productos en tu carrito ya no está disponible.',
-        );
-      }
-      if (!variant.active) {
-        throw new UnprocessableEntityException(
-          `El producto "${variant.product.name}" ya no está disponible.`,
-        );
-      }
-      const lineTotal = new Prisma.Decimal(item.priceSnapshot).mul(item.quantity);
-      return {
-        variantId: item.variantId,
-        skuSnapshot: variant.sku,
-        productNameSnapshot: variant.product.name,
-        quantity: item.quantity,
-        unitPrice: item.priceSnapshot,
-        lineTotal,
-      };
-    });
-
-    const subtotal = itemSnapshots.reduce(
-      (acc, i) => acc.add(i.lineTotal),
-      new Prisma.Decimal(0),
-    );
-
-    let shippingCost = new Prisma.Decimal(0);
-    if (dto.shippingMethodId) {
-      const method = await this.shippingService.findShippingMethodById(dto.shippingMethodId);
-      if (method) shippingCost = new Prisma.Decimal(method.basePrice.toString());
-    }
-
-    const discountTotal = new Prisma.Decimal(0);
-    const total = subtotal.add(shippingCost);
-
-    const order = await this.orderRepository.createOrder({
-      userId,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      shippingAddress: dto.shippingAddress as object,
-      subtotal,
-      shippingCost,
-      discountTotal,
-      total,
-      items: {
-        create: itemSnapshots.map((item) => ({
-          variantId: item.variantId,
-          skuSnapshot: item.skuSnapshot,
-          productNameSnapshot: item.productNameSnapshot,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal,
-        })),
-      },
-    });
-
-    try {
-      await this.stockService.reserveStock(
-        order.id,
-        cart.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-      );
-    } catch (err) {
-      await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
-      throw err;
-    }
-
-    await this.orderRepository.deleteCartItems(cart.id);
-
-    const payment = await this.paymentService.createPayment({
-      orderId: order.id,
-      method: dto.paymentMethodCode,
-      amount: order.total.toString(),
-      currency: order.currency,
-    });
-
-    if (dto.shippingMethodId) {
-      await this.shippingService.createShipment({
-        orderId: order.id,
-        methodId: dto.shippingMethodId,
-      });
-    }
-
-    void this.mailService.sendOrderConfirmation(order);
-    void this.orderRepository.addStatusHistory(order.id, OrderStatus.RECEIVED);
-
-    return { order, payment };
-  }
-
-  async guestCheckout(dto: GuestCheckoutDto): Promise<CheckoutResult> {
-    if (!dto.items || dto.items.length === 0) {
-      throw new BadRequestException('El carrito está vacío');
-    }
-
-    const variantIds = dto.items.map((i) => i.variantId);
-    const variants = await this.catalogService.findVariantsByIds(variantIds);
-    const variantMap = new Map(variants.map((v) => [v.id, v]));
-
-    const itemSnapshots = dto.items.map((item) => {
-      const variant = variantMap.get(item.variantId);
-      if (!variant) {
-        throw new UnprocessableEntityException(
-          'Uno de los productos en tu carrito ya no está disponible.',
-        );
-      }
-      if (!variant.active) {
-        throw new UnprocessableEntityException(
-          `El producto "${variant.product.name}" ya no está disponible.`,
-        );
-      }
-      const lineTotal = new Prisma.Decimal(variant.price.toString()).mul(item.quantity);
-      return {
-        variantId: item.variantId,
-        skuSnapshot: variant.sku,
-        productNameSnapshot: variant.product.name,
-        quantity: item.quantity,
-        unitPrice: variant.price,
-        lineTotal,
-      };
-    });
-
-    const subtotal = itemSnapshots.reduce(
-      (acc, i) => acc.add(i.lineTotal),
-      new Prisma.Decimal(0),
-    );
-
-    let shippingCost = new Prisma.Decimal(0);
-    if (dto.shippingMethodId) {
-      const method = await this.shippingService.findShippingMethodById(dto.shippingMethodId);
-      if (method) shippingCost = new Prisma.Decimal(method.basePrice.toString());
-    }
-
-    const total = subtotal.add(shippingCost);
-    const guestUserId = `guest-${crypto.randomUUID()}`;
-
-    const order = await this.orderRepository.createOrder({
-      userId: guestUserId,
-      customerEmail: dto.customerEmail,
-      customerName: dto.customerName,
-      shippingAddress: dto.shippingAddress as object,
-      subtotal,
-      shippingCost,
-      discountTotal: new Prisma.Decimal(0),
-      total,
-      items: {
-        create: itemSnapshots.map((item) => ({
-          variantId: item.variantId,
-          skuSnapshot: item.skuSnapshot,
-          productNameSnapshot: item.productNameSnapshot,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: item.lineTotal,
-        })),
-      },
-    });
-
-    try {
-      await this.stockService.reserveStock(
-        order.id,
-        dto.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-      );
-    } catch (err) {
-      await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
-      throw err;
-    }
-
-    const payment = await this.paymentService.createPayment({
-      orderId: order.id,
-      method: dto.paymentMethodCode,
-      amount: order.total.toString(),
-      currency: order.currency,
-    });
-
-    if (dto.shippingMethodId) {
-      await this.shippingService.createShipment({
-        orderId: order.id,
-        methodId: dto.shippingMethodId,
-      });
-    }
-
-    void this.mailService.sendOrderConfirmation(order);
-    void this.orderRepository.addStatusHistory(order.id, OrderStatus.RECEIVED);
-
-    return { order, payment };
-  }
 
   async findMyOrders(userId: string) {
     return this.orderRepository.findOrdersByUserId(userId);
@@ -270,17 +67,13 @@ export class OrderService implements IOrderService {
 
     const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
     if (!allowed.includes(dto.status)) {
-      throw new BadRequestException(
-        `Transición inválida: ${order.status} → ${dto.status}`,
-      );
+      throw new BadRequestException(`Transición inválida: ${order.status} → ${dto.status}`);
     }
 
-    // Stock: confirmar reserva solo en el primer despacho
     if (dto.status === OrderStatus.IN_TRANSIT && order.deliveryAttempts === 0) {
       await this.stockService.confirmReservation(orderId);
     }
 
-    // Stock: liberar reserva solo si nunca salió a reparto
     if (dto.status === OrderStatus.CANCELLED && order.deliveryAttempts === 0) {
       await this.stockService.releaseReservation(orderId);
     }
@@ -289,27 +82,18 @@ export class OrderService implements IOrderService {
 
     if (dto.status === OrderStatus.NOT_DELIVERED) {
       const newAttempts = order.deliveryAttempts + 1;
-
       if (newAttempts >= MAX_DELIVERY_ATTEMPTS) {
-        // Tercer fallo → cancelar automáticamente
-        updateData = {
-          status: OrderStatus.CANCELLED,
-          deliveryAttempts: newAttempts,
-          nextDeliveryAt: null,
-        };
+        updateData = { status: OrderStatus.CANCELLED, deliveryAttempts: newAttempts, nextDeliveryAt: null };
       } else {
         const nextDelivery = new Date();
         nextDelivery.setHours(nextDelivery.getHours() + 24);
-        updateData = {
-          status: OrderStatus.NOT_DELIVERED,
-          deliveryAttempts: newAttempts,
-          nextDeliveryAt: nextDelivery,
-        };
+        updateData = { status: OrderStatus.NOT_DELIVERED, deliveryAttempts: newAttempts, nextDeliveryAt: nextDelivery };
       }
     }
 
     const updated = await this.orderRepository.updateOrder(orderId, updateData);
-    void this.orderRepository.addStatusHistory(orderId, updated.status);
+
+    await this.orderRepository.addStatusHistory(orderId, updated.status);
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);
 
     if (updated.status === OrderStatus.IN_TRANSIT) {
@@ -331,7 +115,7 @@ export class OrderService implements IOrderService {
 
   async getOrderStats(): Promise<OrderStats> {
     const counts = await this.orderRepository.countByStatus();
-    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    const total  = Object.values(counts).reduce((a, b) => a + b, 0);
     return {
       RECEIVED:       counts['RECEIVED']       ?? 0,
       IN_PREPARATION: counts['IN_PREPARATION'] ?? 0,
@@ -353,11 +137,11 @@ export class OrderService implements IOrderService {
 
     if (result === 'approved') {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.APPROVED);
-      // El pedido ya está en RECEIVED; no se necesita cambio de estado
     } else {
       await this.paymentService.updatePaymentStatus(orderId, PaymentStatusEnum.REJECTED);
       await this.stockService.releaseReservation(orderId);
       await this.orderRepository.updateOrder(orderId, { status: OrderStatus.CANCELLED });
+      await this.orderRepository.addStatusHistory(orderId, OrderStatus.CANCELLED);
     }
   }
 
@@ -368,6 +152,7 @@ export class OrderService implements IOrderService {
         status: OrderStatus.IN_TRANSIT,
         nextDeliveryAt: null,
       });
+      await this.orderRepository.addStatusHistory(order.id, OrderStatus.IN_TRANSIT);
       void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
     }
   }

@@ -9,6 +9,8 @@ import { PaymentWebhookDto } from '../dto/payment-webhook.dto';
 import { CheckoutDto } from '../dto/checkout.dto';
 import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import { CHECKOUT_SERVICE } from '../interfaces/checkout-service.interface';
+import type { ICheckoutService } from '../interfaces/checkout-service.interface';
 import { ORDER_SERVICE } from '../interfaces/order-service.interface';
 import type { IOrderService } from '../interfaces/order-service.interface';
 import { PROMOTION_SERVICE } from '../interfaces/promotion-service.interface';
@@ -17,21 +19,22 @@ import type { IPromotionService } from '../interfaces/promotion-service.interfac
 @Controller('orders')
 export class OrderController {
   constructor(
-    @Inject(ORDER_SERVICE) private readonly orderService: IOrderService,
+    @Inject(CHECKOUT_SERVICE) private readonly checkoutService: ICheckoutService,
+    @Inject(ORDER_SERVICE)    private readonly orderService: IOrderService,
     @Inject(PROMOTION_SERVICE) private readonly promotionService: IPromotionService,
   ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   checkout(@CurrentUser() user: User, @Body() dto: CheckoutDto) {
-    return this.orderService.checkout(user.id, dto);
+    return this.checkoutService.checkout(user.id, dto);
   }
 
   @Public()
   @Post('guest')
   @HttpCode(HttpStatus.CREATED)
   guestCheckout(@Body() dto: GuestCheckoutDto) {
-    return this.orderService.guestCheckout(dto);
+    return this.checkoutService.guestCheckout(dto);
   }
 
   @Get()
