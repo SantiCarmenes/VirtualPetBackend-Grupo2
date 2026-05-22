@@ -10,8 +10,8 @@ async function bootstrap() {
     logger: ['log', 'warn', 'error', 'debug', 'verbose'],
   });
 
-  const allowedOrigins = process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(',').map((o) => o.trim())
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
     : ['http://localhost:4000', 'http://localhost:3001'];
 
   Logger.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`, 'Bootstrap');
