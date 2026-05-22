@@ -15,6 +15,7 @@ import { PAYMENT_SERVICE } from '../../payment/application/ports/inbound/payment
 import type { IPaymentService } from '../../payment/application/ports/inbound/payment-service.port';
 import { SHIPPING_SERVICE } from '../../shipping/application/ports/inbound/shipping-service.port';
 import type { IShippingService } from '../../shipping/application/ports/inbound/shipping-service.port';
+import { ShipmentStatusEnum } from '../../shipping/domain/shipment-status.enum';
 import { CheckoutResult, IOrderService, OrderStats } from '../interfaces/order-service.interface';
 import { OrderRepository } from '../order.repository';
 import { CheckoutDto } from '../dto/checkout.dto';
@@ -307,6 +308,14 @@ export class OrderService implements IOrderService {
 
     const updated = await this.orderRepository.updateOrder(orderId, updateData);
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);
+
+    // Sync shipment status with order status
+    if (updated.status === OrderStatus.IN_TRANSIT) {
+      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED).catch(() => {});
+    } else if (updated.status === OrderStatus.DELIVERED) {
+      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
+    }
+
     return updated;
   }
 
