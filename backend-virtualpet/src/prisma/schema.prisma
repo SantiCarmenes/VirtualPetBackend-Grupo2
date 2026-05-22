@@ -92,9 +92,10 @@ model Category {
   slug        String  @unique
   imageUrl    String? @map("image_url")
 
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryTree")
-  products Product[]
+  parent             Category?          @relation("CategoryTree", fields: [parentId], references: [id])
+  children           Category[]         @relation("CategoryTree")
+  products           Product[]
+  categoryAttributes CategoryAttribute[]
 
   @@index([parentId])
   @@map("category")
@@ -163,8 +164,9 @@ model Attribute {
   unit       String?
   filterable Boolean       @default(false)
 
-  values            AttributeValue[]
-  productAttributes ProductAttribute[]
+  values             AttributeValue[]
+  productAttributes  ProductAttribute[]
+  categoryAttributes CategoryAttribute[]
 
   @@map("attribute")
   @@schema("catalog")
@@ -194,6 +196,18 @@ model ProductAttribute {
 
   @@id([productId, attributeId])
   @@map("product_attribute")
+  @@schema("catalog")
+}
+
+model CategoryAttribute {
+  categoryId  String @map("category_id")
+  attributeId String @map("attribute_id")
+
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attribute Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, attributeId])
+  @@map("category_attribute")
   @@schema("catalog")
 }
 

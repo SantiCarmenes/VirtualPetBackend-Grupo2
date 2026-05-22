@@ -11,8 +11,22 @@ export class CategoryService {
     return this.catalogRepository.findAllCategories();
   }
 
-  findAttributesByCategory() {
-    return this.catalogRepository.findFilterableAttributesGroupedByCategory();
+  async findCategoriesWithAttributes() {
+    const rows = await this.catalogRepository.findCategoriesWithFilterAttributes();
+    return rows.map(({ categoryAttributes, ...rest }) => ({
+      ...rest,
+      attributes: categoryAttributes.map((ca: { attribute: unknown }) => ca.attribute),
+    }));
+  }
+
+  async addAttributeToCategory(categoryId: string, attributeId: string) {
+    await this.findById(categoryId);
+    return this.catalogRepository.addAttributeToCategory(categoryId, attributeId);
+  }
+
+  async removeAttributeFromCategory(categoryId: string, attributeId: string) {
+    await this.findById(categoryId);
+    return this.catalogRepository.removeAttributeFromCategory(categoryId, attributeId);
   }
 
   async findById(id: string) {

@@ -27,6 +27,38 @@ export class CatalogRepository {
     });
   }
 
+  findCategoriesWithFilterAttributes() {
+    return this.prisma.category.findMany({
+      where: { parentId: null },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        imageUrl: true,
+        categoryAttributes: {
+          select: {
+            attribute: {
+              include: { values: { orderBy: { displayOrder: 'asc' } } },
+            },
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  addAttributeToCategory(categoryId: string, attributeId: string) {
+    return this.prisma.categoryAttribute.create({
+      data: { categoryId, attributeId },
+    });
+  }
+
+  removeAttributeFromCategory(categoryId: string, attributeId: string) {
+    return this.prisma.categoryAttribute.delete({
+      where: { categoryId_attributeId: { categoryId, attributeId } },
+    });
+  }
+
   findCategoryById(id: string) {
     return this.prisma.category.findUnique({
       where: { id },

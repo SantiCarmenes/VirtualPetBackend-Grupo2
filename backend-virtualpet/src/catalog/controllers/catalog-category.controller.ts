@@ -15,10 +15,11 @@ export class CatalogCategoryController {
     return this.categoryService.findAll();
   }
 
+  // Debe ir ANTES de :id para que Express no lo interprete como parámetro
   @Public()
-  @Get('attributes')
-  findAttributes() {
-    return this.categoryService.findAttributesByCategory();
+  @Get('with-attributes')
+  findWithAttributes() {
+    return this.categoryService.findCategoriesWithAttributes();
   }
 
   @Public()
@@ -44,5 +45,21 @@ export class CatalogCategoryController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.categoryService.delete(id);
+  }
+
+  // ─── Gestión de atributos por categoría (backoffice) ─────────────────────
+
+  @Roles('BACKOFFICE')
+  @Post(':id/attributes/:attributeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  addAttribute(@Param('id') id: string, @Param('attributeId') attributeId: string) {
+    return this.categoryService.addAttributeToCategory(id, attributeId);
+  }
+
+  @Roles('BACKOFFICE')
+  @Delete(':id/attributes/:attributeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeAttribute(@Param('id') id: string, @Param('attributeId') attributeId: string) {
+    return this.categoryService.removeAttributeFromCategory(id, attributeId);
   }
 }

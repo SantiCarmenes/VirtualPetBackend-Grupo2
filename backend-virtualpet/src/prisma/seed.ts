@@ -174,6 +174,26 @@ async function main() {
     higienePez:   (await prisma.category.create({ data: { name: 'Peces',  slug: 'higiene-peces',       parentId: catHigiene.id    } })).id,
   };
 
+  console.log('Vinculando atributos filtrables a categorías...');
+  await prisma.categoryAttribute.createMany({
+    data: [
+      // Alimentos: tipo-animal + sabor
+      { categoryId: catAlimentos.id,  attributeId: A.animal },
+      { categoryId: catAlimentos.id,  attributeId: A.sabor  },
+      // Juguetes: tipo-animal + color + material
+      { categoryId: catJuguetes.id,   attributeId: A.animal    },
+      { categoryId: catJuguetes.id,   attributeId: A.color     },
+      { categoryId: catJuguetes.id,   attributeId: A.material  },
+      // Accesorios: tipo-animal + color + material + talle
+      { categoryId: catAccesorios.id, attributeId: A.animal    },
+      { categoryId: catAccesorios.id, attributeId: A.color     },
+      { categoryId: catAccesorios.id, attributeId: A.material  },
+      { categoryId: catAccesorios.id, attributeId: A.talle     },
+      // Higiene: tipo-animal
+      { categoryId: catHigiene.id,    attributeId: A.animal },
+    ],
+  });
+
   console.log('Creando depósito...');
   const warehouse = await prisma.warehouse.create({
     data: {
