@@ -1,0 +1,479 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["user", "auth", "catalog", "order", "inventory", "payment", "shipping"]
+}
+
+enum Role {
+  CLIENT
+  BACKOFFICE
+
+  @@schema("user")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  username     String   @unique
+  role         Role     @default(CLIENT)
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  addresses Address[]
+
+  @@map("user")
+  @@schema("user")
+}
+
+model Address {
+  id         String  @id @default(uuid())
+  userId     String  @map("user_id")
+  street     String
+  number     String?
+  apartment  String?
+  city       String
+  province   String
+  postalCode String  @map("postal_code")
+  isDefault  Boolean @default(false) @map("is_default")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("address")
+  @@schema("user")
+}
+
+// Sin @relation: userId es campo plano, no FK entre schemas.
+// La validación del usuario se hace a nivel de aplicación en AuthService.
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("refresh_token")
+  @@schema("auth")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("password_reset_token")
+  @@schema("auth")
+}
+
+// ─── CATALOG ────────────────────────────────────────────────────────────────
+
+enum AttributeType {
+  TEXT
+  NUMERIC
+  COLOR
+  BOOLEAN
+
+  @@schema("catalog")
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  parentId    String? @map("parent_id")
+  name        String
+  description String?
+  slug        String  @unique
+  imageUrl    String? @map("image_url")
+
+  parent             Category?          @relation("CategoryTree", fields: [parentId], references: [id])
+  children           Category[]         @relation("CategoryTree")
+  products           Product[]
+  categoryAttributes CategoryAttribute[]
+
+  @@index([parentId])
+  @@map("category")
+  @@schema("catalog")
+}
+
+model Product {
+  id          String  @id @default(uuid())
+  categoryId  String  @map("category_id")
+  name        String
+  description String?
+  slug        String  @unique
+  active      Boolean @default(true)
+
+  category          Category           @relation(fields: [categoryId], references: [id])
+  variants          ProductVariant[]
+  images            ProductImage[]
+  productAttributes ProductAttribute[]
+
+  // Índices para filtros del catálogo
+  @@index([categoryId])           // filtro por categoría
+  @@index([active, categoryId])   // productos activos por categoría (query más común)
+  @@map("product")
+  @@schema("catalog")
+}
+
+model ProductVariant {
+  id        String  @id @default(uuid())
+  productId String  @map("product_id")
+  sku       String  @unique
+  price     Decimal @db.Decimal(10, 2)
+  active    Boolean @default(true)
+
+  product           Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images            ProductImage[]
+  variantAttributes ProductVariantAttribute[]
+
+  // Índices para filtro de precio y sort
+  @@index([productId, active, price]) // cubre lookup de variantes activas + sort por precio
+  @@map("product_variant")
+  @@schema("catalog")
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String  @map("product_id")
+  variantId String? @map("variant_id")
+  url       String  @map("image_url")
+  altText   String? @map("alt_text")
+  isPrimary Boolean @default(false) @map("is_primary")
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId, isPrimary]) // lookup de imagen principal por producto
+  @@map("product_image")
+  @@schema("catalog")
+}
+
+
+model Attribute {
+  id         String        @id @default(uuid())
+  name       String
+  slug       String        @unique
+  type       AttributeType
+  unit       String?
+  filterable Boolean       @default(false)
+
+  values             AttributeValue[]
+  productAttributes  ProductAttribute[]
+  categoryAttributes CategoryAttribute[]
+
+  @@map("attribute")
+  @@schema("catalog")
+}
+
+model AttributeValue {
+  id           String @id @default(uuid())
+  attributeId  String @map("attribute_id")
+  value        String
+  slug         String
+  displayOrder Int    @default(0) @map("display_order")
+
+  attribute         Attribute               @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  variantAttributes ProductVariantAttribute[]
+
+  @@unique([attributeId, slug])
+  @@map("attribute_value")
+  @@schema("catalog")
+}
+
+model ProductAttribute {
+  productId   String @map("product_id")
+  attributeId String @map("attribute_id")
+
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@id([productId, attributeId])
+  @@map("product_attribute")
+  @@schema("catalog")
+}
+
+model CategoryAttribute {
+  categoryId  String @map("category_id")
+  attributeId String @map("attribute_id")
+
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  attribute Attribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@id([categoryId, attributeId])
+  @@map("category_attribute")
+  @@schema("catalog")
+}
+
+model ProductVariantAttribute {
+  variantId        String @map("variant_id")
+  attributeValueId String @map("attribute_value_id")
+
+  variant        ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValue AttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, attributeValueId])
+  @@index([attributeValueId]) // filtro por atributo (mascota, color, etc.)
+  @@map("product_variant_attribute")
+  @@schema("catalog")
+}
+
+// ─── ORDER ──────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  RECEIVED
+  IN_PREPARATION
+  IN_TRANSIT
+  DELIVERED
+  NOT_DELIVERED
+  CANCELLED
+
+  @@schema("order")
+}
+
+// Sin @relation: userId es campo plano, no FK entre schemas (user schema).
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items CartItem[]
+
+  @@map("cart")
+  @@schema("order")
+}
+
+// Sin @relation: variantId es campo plano, no FK al schema catalog.
+model CartItem {
+  id            String  @id @default(uuid())
+  cartId        String  @map("cart_id")
+  variantId     String  @map("variant_id")
+  quantity      Int
+  priceSnapshot Decimal @map("price_snapshot") @db.Decimal(10, 2)
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, variantId])
+  @@map("cart_item")
+  @@schema("order")
+}
+
+// Sin @relation: userId es campo plano, no FK entre schemas (user schema).
+model Order {
+  id              String      @id @default(uuid())
+  userId          String      @map("user_id")
+  customerEmail   String      @map("customer_email")
+  customerName    String      @map("customer_name")
+  shippingAddress Json        @map("shipping_address")
+  status            OrderStatus @default(RECEIVED)
+  deliveryAttempts  Int         @default(0) @map("delivery_attempts")
+  nextDeliveryAt    DateTime?   @map("next_delivery_at")
+  subtotal          Decimal     @db.Decimal(10, 2)
+  shippingCost      Decimal     @db.Decimal(10, 2) @map("shipping_cost")
+  discountTotal     Decimal     @db.Decimal(10, 2) @map("discount_total")
+  total             Decimal     @db.Decimal(10, 2)
+  currency          String      @default("ARS")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  items             OrderItem[]
+  appliedPromotions AppliedPromotion[]
+  statusHistory     OrderStatusHistory[]
+
+  @@index([status, nextDeliveryAt])
+  @@map("order")
+  @@schema("order")
+}
+
+// Sin @relation: variantId es campo plano, no FK al schema catalog.
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String      @map("order_id")
+  status    OrderStatus
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_status_history")
+  @@schema("order")
+}
+
+model OrderItem {
+  id                  String  @id @default(uuid())
+  orderId             String  @map("order_id")
+  variantId           String  @map("variant_id")
+  skuSnapshot         String  @map("sku_snapshot")
+  productNameSnapshot String  @map("product_name_snapshot")
+  quantity            Int
+  unitPrice           Decimal @db.Decimal(10, 2) @map("unit_price")
+  lineTotal           Decimal @db.Decimal(10, 2) @map("line_total")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_item")
+  @@schema("order")
+}
+
+model Promotion {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  value       Decimal  @db.Decimal(10, 2)
+  validFrom   DateTime @map("valid_from")
+  validUntil  DateTime @map("valid_until")
+  maxUses     Int      @map("max_uses")
+  currentUses Int      @default(0) @map("current_uses")
+  conditions  Json
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  appliedPromotions AppliedPromotion[]
+
+  @@map("promotion")
+  @@schema("order")
+}
+
+model AppliedPromotion {
+  id             String   @id @default(uuid())
+  orderId        String   @map("order_id")
+  promotionId    String   @map("promotion_id")
+  discountAmount Decimal  @db.Decimal(10, 2) @map("discount_amount")
+  appliedAt      DateTime @default(now()) @map("applied_at")
+
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  promotion Promotion @relation(fields: [promotionId], references: [id])
+
+  @@unique([orderId, promotionId])
+  @@map("applied_promotion")
+  @@schema("order")
+}
+
+// ─── PAYMENT ────────────────────────────────────────────────────────────────
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  TRANSFER
+
+  @@schema("payment")
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+
+  @@schema("payment")
+}
+
+// orderId es campo plano, sin FK al schema order (cross-schema).
+model Payment {
+  id        String        @id @default(uuid())
+  orderId   String        @unique @map("order_id")
+  method    PaymentMethod
+  status    PaymentStatus @default(PENDING)
+  amount    Decimal       @db.Decimal(10, 2)
+  currency  String        @default("ARS")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@map("payment")
+  @@schema("payment")
+}
+
+// ─── SHIPPING ───────────────────────────────────────────────────────────────
+
+enum ShipmentStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+
+  @@schema("shipping")
+}
+
+model ShippingMethod {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  basePrice     Decimal  @db.Decimal(10, 2) @map("base_price")
+  estimatedDays Int?     @map("estimated_days")
+  active        Boolean  @default(true)
+
+  shipments Shipment[]
+
+  @@map("shipping_method")
+  @@schema("shipping")
+}
+
+// orderId es campo plano, sin FK al schema order (cross-schema).
+model Shipment {
+  id                String         @id @default(uuid())
+  orderId           String         @unique @map("order_id")
+  methodId          String         @map("method_id")
+  status            ShipmentStatus @default(PENDING)
+  trackingNumber    String?        @map("tracking_number")
+  estimatedDelivery DateTime?      @map("estimated_delivery")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  method ShippingMethod @relation(fields: [methodId], references: [id])
+
+  @@map("shipment")
+  @@schema("shipping")
+}
+
+// ─── INVENTORY ──────────────────────────────────────────────────────────────
+
+model Warehouse {
+  id      String @id @default(uuid())
+  name    String
+  code    String @unique
+  address Json
+
+  stockItems StockItem[]
+
+  @@map("warehouse")
+  @@schema("inventory")
+}
+
+// Sin @relation: variantId es campo plano, no FK al schema catalog.
+model StockItem {
+  id                String   @id @default(uuid())
+  variantId         String   @map("variant_id")
+  warehouseId       String   @map("warehouse_id")
+  quantityAvailable Int      @default(0) @map("quantity_available")
+  quantityReserved  Int      @default(0) @map("quantity_reserved")
+  lastUpdated       DateTime @default(now()) @updatedAt @map("last_updated")
+
+  warehouse    Warehouse         @relation(fields: [warehouseId], references: [id])
+  reservations StockReservation[]
+
+  @@unique([variantId, warehouseId])
+  @@map("stock_item")
+  @@schema("inventory")
+}
+
+// Sin @relation: variantId y orderId son campos planos, no FK entre schemas.
+model StockReservation {
+  id          String   @id @default(uuid())
+  variantId   String   @map("variant_id")
+  orderId     String   @map("order_id")
+  stockItemId String   @map("stock_item_id")
+  quantity    Int
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  stockItem StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@map("stock_reservation")
+  @@schema("inventory")
+}

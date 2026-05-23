@@ -1,0 +1,65 @@
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post } from '@nestjs/common';
+import { Public } from '../../auth/decorators/public.decorator';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { CreateCategoryDto } from '../dto/create-category.dto';
+import { UpdateCategoryDto } from '../dto/update-category.dto';
+import { CategoryService } from '../services/category.service';
+
+@Controller('catalog/categories')
+export class CatalogCategoryController {
+  constructor(private readonly categoryService: CategoryService) {}
+
+  @Public()
+  @Get()
+  findAll() {
+    return this.categoryService.findAll();
+  }
+
+  // Debe ir ANTES de :id para que Express no lo interprete como parámetro
+  @Public()
+  @Get('with-attributes')
+  findWithAttributes() {
+    return this.categoryService.findCategoriesWithAttributes();
+  }
+
+  @Public()
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.categoryService.findById(id);
+  }
+
+  @Roles('BACKOFFICE')
+  @Post()
+  create(@Body() dto: CreateCategoryDto) {
+    return this.categoryService.create(dto);
+  }
+
+  @Roles('BACKOFFICE')
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.categoryService.update(id, dto);
+  }
+
+  @Roles('BACKOFFICE')
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id') id: string) {
+    return this.categoryService.delete(id);
+  }
+
+  // ─── Gestión de atributos por categoría (backoffice) ─────────────────────
+
+  @Roles('BACKOFFICE')
+  @Post(':id/attributes/:attributeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  addAttribute(@Param('id') id: string, @Param('attributeId') attributeId: string) {
+    return this.categoryService.addAttributeToCategory(id, attributeId);
+  }
+
+  @Roles('BACKOFFICE')
+  @Delete(':id/attributes/:attributeId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeAttribute(@Param('id') id: string, @Param('attributeId') attributeId: string) {
+    return this.categoryService.removeAttributeFromCategory(id, attributeId);
+  }
+}
