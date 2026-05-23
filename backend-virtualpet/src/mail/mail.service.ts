@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Resend } from 'resend';
+import { BrevoClient, BrevoEnvironment } from '@getbrevo/brevo';
 
 const STATUS_LABELS: Record<string, string> = {
   RECEIVED:       'Recibido',
@@ -133,8 +133,25 @@ function trackLink(url: string): string {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly resend = new Resend(process.env.RESEND_API_KEY);
-  private readonly from   = process.env.MAIL_FROM ?? 'Virtual Pet <onboarding@resend.dev>';
+  private readonly client: BrevoClient;
+  private readonly senderName  = process.env.MAIL_FROM_NAME  ?? 'Virtual Pet';
+  private readonly senderEmail = process.env.MAIL_FROM_EMAIL ?? 'virtualpetmdq@gmail.com';
+
+  constructor() {
+    this.client = new BrevoClient({
+      apiKey:      process.env.BREVO_API_KEY ?? '',
+      environment: BrevoEnvironment.Default,
+    });
+  }
+
+  private async send(to: string, subject: string, html: string): Promise<void> {
+    await this.client.transactionalEmails.sendTransacEmail({
+      sender:      { name: this.senderName, email: this.senderEmail },
+      to:          [{ email: to }],
+      subject,
+      htmlContent: html,
+    });
+  }
 
   async sendOrderConfirmation(order: OrderMailData): Promise<void> {
     const trackUrl = `${process.env.FRONTEND_URL}/track/${order.id}`;
@@ -248,12 +265,7 @@ export class MailService {
       ${trackLink(trackUrl)}`;
 
     try {
-      await this.resend.emails.send({
-        from:    this.from,
-        to:      order.customerEmail,
-        subject: `¡Pedido recibido! #${orderId} – Virtual Pet`,
-        html:    layout(content),
-      });
+      await this.send(order.customerEmail, `¡Pedido recibido! #${orderId} – Virtual Pet`, layout(content));
     } catch (err) {
       this.logger.error(`Error enviando confirmación de orden ${order.id}`, err);
     }
@@ -318,12 +330,7 @@ export class MailService {
       ${trackLink(trackUrl)}`;
 
     try {
-      await this.resend.emails.send({
-        from:    this.from,
-        to:      order.customerEmail,
-        subject: `${icon} Tu pedido está ${label.toLowerCase()} – Virtual Pet`,
-        html:    layout(content),
-      });
+      await this.send(order.customerEmail, `${icon} Tu pedido está ${label.toLowerCase()} – Virtual Pet`, layout(content));
     } catch (err) {
       this.logger.error(`Error enviando actualización de estado de orden ${order.id}`, err);
     }
@@ -354,12 +361,7 @@ export class MailService {
       ${trackLink(resetUrl)}`;
 
     try {
-      await this.resend.emails.send({
-        from:    this.from,
-        to:      email,
-        subject: '🔑 Recuperar contraseña – Virtual Pet',
-        html:    layout(content),
-      });
+      await this.send(email, '🔑 Recuperar contraseña – Virtual Pet', layout(content));
     } catch (err) {
       this.logger.error('Error enviando email de recuperación', err);
       throw err;
