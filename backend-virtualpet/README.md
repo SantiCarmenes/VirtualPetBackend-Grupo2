@@ -2,28 +2,44 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<p align="center">
+  <b>VirtualPet — Backend API</b><br/>
+  REST API built with <a href="http://nestjs.com/" target="_blank">NestJS</a>, Prisma and PostgreSQL. Deployed on Google Cloud Run with Cloud SQL.
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+
+<p align="center">
+  <img src="https://img.shields.io/badge/node-22.x-brightgreen" alt="Node 22"/>
+  <img src="https://img.shields.io/badge/NestJS-11-red" alt="NestJS 11"/>
+  <img src="https://img.shields.io/badge/Prisma-7-blue" alt="Prisma 7"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-multi--schema-336791" alt="PostgreSQL"/>
+</p>
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+REST API for the VirtualPet platform. Handles authentication, product catalog, shopping cart, order lifecycle, inventory management, payments, and shipping. Built with NestJS 11 and Prisma 7 on a multi-schema PostgreSQL database.
+
+**Modules:**
+
+| Module | Responsibility |
+|--------|---------------|
+| `auth` | JWT authentication, access/refresh tokens, guards |
+| `user` | User accounts, addresses, profile |
+| `catalog` | Products, variants, attributes |
+| `inventory` | Warehouses, stock levels, atomic reservations |
+| `order` | Cart, checkout (auth + guest), order lifecycle |
+| `payment` | Payment methods, webhook processing |
+| `shipping` | Shipping methods, shipments |
+| `mail` | Transactional email via Brevo |
+
+## Stack
+
+- **Runtime:** Node.js 22
+- **Framework:** NestJS 11
+- **ORM:** Prisma 7 with `pg` adapter
+- **Database:** PostgreSQL — multi-schema (`user`, `auth`, `catalog`, `order`, `inventory`, `payment`, `shipping`)
+- **Auth:** JWT (access token 15 min + refresh token 7 days with rotation)
+- **Email:** Brevo / Nodemailer
+- **Deploy:** Google Cloud Run + Cloud SQL (PostgreSQL)
 
 ## Project setup
 
@@ -31,68 +47,95 @@
 $ npm install
 ```
 
+## Environment variables
+
+Create a `.env` file at the project root:
+
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/virtualpet"
+
+# JWT
+JWT_SECRET="your_jwt_secret"
+JWT_REFRESH_SECRET="your_refresh_secret"
+
+# Server
+PORT=8080
+
+# CORS — comma-separated allowed origins
+ALLOWED_ORIGINS="http://localhost:3000,http://localhost:4000"
+
+# Email (Brevo)
+BREVO_API_KEY="your_brevo_api_key"
+```
+
 ## Compile and run the project
 
 ```bash
-# development
-$ npm run start
+# Apply migrations
+$ npx prisma migrate deploy --schema src/prisma/schema.prisma
 
-# watch mode
+# Seed initial data (optional)
+$ npm run db:seed
+
+# Development (watch mode)
 $ npm run start:dev
 
-# production mode
+# Production
 $ npm run start:prod
 ```
+
+The server listens on `http://localhost:8080` by default.
 
 ## Run tests
 
 ```bash
-# unit tests
+# Unit tests
 $ npm run test
 
-# e2e tests
-$ npm run test:e2e
+# Watch mode
+$ npm run test:watch
 
-# test coverage
+# Coverage
 $ npm run test:cov
 ```
 
-## Deployment
+## Deployment — Google Cloud Run + Cloud SQL
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+The application is containerized and deployed to **Google Cloud Run**, connected to a **Cloud SQL (PostgreSQL)** instance.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Build and push
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker build -t gcr.io/<PROJECT_ID>/virtualpet-backend .
+docker push gcr.io/<PROJECT_ID>/virtualpet-backend
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Deploy to Cloud Run
+
+```bash
+gcloud run deploy virtualpet-backend \
+  --image gcr.io/<PROJECT_ID>/virtualpet-backend \
+  --region <REGION> \
+  --add-cloudsql-instances <PROJECT_ID>:<REGION>:<INSTANCE_NAME> \
+  --set-env-vars DATABASE_URL="postgresql://user:password@/<DB_NAME>?host=/cloudsql/<PROJECT_ID>:<REGION>:<INSTANCE_NAME>" \
+  --set-env-vars JWT_SECRET="..." \
+  --set-env-vars JWT_REFRESH_SECRET="..." \
+  --set-env-vars ALLOWED_ORIGINS="https://your-frontend.com,https://your-backoffice.com" \
+  --set-env-vars BREVO_API_KEY="..."
+```
+
+### Migrations on deploy
+
+`npm run start:prod` runs `prisma migrate deploy` automatically before starting the server, so migrations are applied on every deploy with no manual intervention required.
+
+### Dockerfile
+
+The image uses a two-stage build: a `builder` stage compiles TypeScript and generates the Prisma client, and a `runner` stage installs only production dependencies and copies the compiled output. The final image is based on `node:22-alpine`.
 
 ## Resources
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [NestJS Documentation](https://docs.nestjs.com)
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [Cloud Run Documentation](https://cloud.google.com/run/docs)
+- [Cloud SQL for PostgreSQL](https://cloud.google.com/sql/docs/postgres)
