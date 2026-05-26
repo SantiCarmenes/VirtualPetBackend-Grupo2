@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   UnprocessableEntityException,
@@ -41,17 +43,47 @@ export class CheckoutService implements ICheckoutService {
     const variants   = await this.catalogService.findVariantsByIds(variantIds);
     const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    const itemSnapshots = cart.items.map((item) => {
+    // Validar disponibilidad y detectar cambios de precio en un solo recorrido
+    const priceChanges: { variantId: string; name: string; oldPrice: number; newPrice: number }[] = [];
+
+    for (const item of cart.items) {
       const variant = variantMap.get(item.variantId);
       if (!variant) throw new UnprocessableEntityException('Uno de los productos en tu carrito ya no está disponible.');
       if (!variant.active) throw new UnprocessableEntityException(`El producto "${variant.product.name}" ya no está disponible.`);
+
+      const snapshot = new Prisma.Decimal(item.priceSnapshot);
+      const current  = new Prisma.Decimal(variant.price);
+      if (!snapshot.equals(current)) {
+        priceChanges.push({
+          variantId: item.variantId,
+          name:      variant.product.name,
+          oldPrice:  snapshot.toNumber(),
+          newPrice:  current.toNumber(),
+        });
+      }
+    }
+
+    if (priceChanges.length > 0 && !dto.acceptPriceChanges) {
+      throw new HttpException(
+        {
+          statusCode:   HttpStatus.CONFLICT,
+          message:      'Algunos precios cambiaron desde que agregaste los productos al carrito.',
+          priceChanges,
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // Siempre usar el precio actual al crear la orden (consistente con lo que el usuario ve en el carrito)
+    const itemSnapshots = cart.items.map((item) => {
+      const variant = variantMap.get(item.variantId)!;
       return {
         variantId:           item.variantId,
         skuSnapshot:         variant.sku,
         productNameSnapshot: variant.product.name,
         quantity:            item.quantity,
-        unitPrice:           item.priceSnapshot,
-        lineTotal:           new Prisma.Decimal(item.priceSnapshot).mul(item.quantity),
+        unitPrice:           variant.price,
+        lineTotal:           new Prisma.Decimal(variant.price.toString()).mul(item.quantity),
       };
     });
 
@@ -91,7 +123,10 @@ export class CheckoutService implements ICheckoutService {
     } catch (err) {
       await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
       await this.orderRepository.addStatusHistory(order.id, OrderStatus.CANCELLED);
-      throw err;
+      if (err instanceof HttpException) throw err;
+      throw new UnprocessableEntityException(
+        err instanceof Error ? err.message : 'No hay suficiente stock para completar el pedido.',
+      );
     }
 
     await this.orderRepository.deleteCartItems(cart.id);
@@ -172,7 +207,10 @@ export class CheckoutService implements ICheckoutService {
     } catch (err) {
       await this.orderRepository.updateOrder(order.id, { status: OrderStatus.CANCELLED });
       await this.orderRepository.addStatusHistory(order.id, OrderStatus.CANCELLED);
-      throw err;
+      if (err instanceof HttpException) throw err;
+      throw new UnprocessableEntityException(
+        err instanceof Error ? err.message : 'No hay suficiente stock para completar el pedido.',
+      );
     }
 
     const payment = await this.paymentService.createPayment({

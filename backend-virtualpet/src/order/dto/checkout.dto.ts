@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 import { PaymentMethodEnum } from '../../payment/domain/payment-method.enum';
 
 export class CheckoutDto {
@@ -17,4 +17,8 @@ export class CheckoutDto {
   @IsOptional()
   @IsUUID()
   shippingMethodId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptPriceChanges?: boolean;
 }
