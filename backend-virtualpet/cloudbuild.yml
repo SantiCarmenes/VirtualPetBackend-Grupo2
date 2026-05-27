@@ -16,3 +16,5 @@ steps:
       - 'gcr.io/$PROJECT_ID/github.com/santicarmenes/virtualpetbackend-grupo2:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
+options:
+  logging: CLOUD_LOGGING_ONLY
