@@ -146,6 +146,44 @@ export class OrderService implements IOrderService {
     }
   }
 
+  async requestInvoice(orderId: string, cuit: string, userId: string) {
+    if (!/^\d{11}$/.test(cuit)) {
+      throw new BadRequestException('El CUIT debe tener exactamente 11 dígitos numéricos');
+    }
+
+    const order = await this.orderRepository.findOrderWithHistoryByIdAndUserId(orderId, userId);
+    if (!order) throw new NotFoundException('Orden no encontrada o no pertenece al usuario');
+
+    const BILLABLE_STATUSES: OrderStatus[] = [
+      OrderStatus.RECEIVED,
+      OrderStatus.IN_PREPARATION,
+      OrderStatus.IN_TRANSIT,
+      OrderStatus.DELIVERED,
+    ];
+    if (!BILLABLE_STATUSES.includes(order.status)) {
+      throw new BadRequestException(
+        'Solo se puede solicitar factura de pedidos confirmados (no cancelados ni con entrega fallida)',
+      );
+    }
+
+    if (order.requiresInvoice) {
+      throw new BadRequestException('Este pedido ya tiene factura solicitada');
+    }
+
+    const now = new Date();
+    const createdAt = new Date(order.createdAt);
+    if (
+      createdAt.getMonth() !== now.getMonth() ||
+      createdAt.getFullYear() !== now.getFullYear()
+    ) {
+      throw new BadRequestException(
+        'Solo podés solicitar factura dentro del mes en el que se realizó el pedido',
+      );
+    }
+
+    return this.orderRepository.requestInvoice(orderId, cuit);
+  }
+
   async processPendingReschedules(): Promise<void> {
     const orders = await this.orderRepository.findOrdersPendingReschedule();
     for (const order of orders) {

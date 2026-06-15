@@ -161,6 +161,22 @@ export class OrderRepository {
     });
   }
 
+  findOrderWithHistoryByIdAndUserId(id: string, userId: string) {
+    return this.prisma.order.findFirst({
+      where: { id, userId },
+      include: {
+        statusHistory: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+  }
+
+  requestInvoice(id: string, cuit: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { requiresInvoice: true, invoiceCuit: cuit },
+    });
+  }
+
   claimGuestOrders(email: string, userId: string) {
     return this.prisma.order.updateMany({
       where: { customerEmail: email, userId: { startsWith: 'guest-' } },

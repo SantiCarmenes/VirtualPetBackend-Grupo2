@@ -51,4 +51,5 @@ export interface IOrderService {
   getOrderStats(): Promise<OrderStats>;
   claimGuestOrders(email: string, userId: string): Promise<void>;
   processPaymentWebhook(orderId: string, result: 'approved' | 'rejected'): Promise<void>;
+  requestInvoice(orderId: string, cuit: string, userId: string): Promise<Order>;
 }

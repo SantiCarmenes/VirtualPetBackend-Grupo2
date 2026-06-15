@@ -287,6 +287,9 @@ model Order {
   appliedPromotions AppliedPromotion[]
   statusHistory     OrderStatusHistory[]
 
+  requiresInvoice Boolean  @default(false) @map("requires_invoice")
+  invoiceCuit     String?  @map("invoice_cuit")
+
   @@index([status, nextDeliveryAt])
   @@map("order")
   @@schema("order")
