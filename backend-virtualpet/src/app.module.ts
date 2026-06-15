@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { ChatbotModule } from './chatbot/chatbot.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrderModule } from './order/order.module';
@@ -25,6 +26,7 @@ import { UserModule } from './user/user.module';
     ShippingModule,
     PaymentModule,
     OrderModule,
+    ChatbotModule,
   ],
   controllers: [AppController],
   providers: [
