@@ -1,16 +1,15 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { CATEGORY_SERVICE } from '../../catalog/interfaces/category-service.interface';
+import type { ICategoryService } from '../../catalog/interfaces/category-service.interface';
+import { PRODUCT_SERVICE } from '../../catalog/interfaces/product-service.interface';
+import type { IProductService } from '../../catalog/interfaces/product-service.interface';
 import { ORDER_SERVICE } from '../../order/interfaces/order-service.interface';
 import type { IOrderService } from '../../order/interfaces/order-service.interface';
+import { PAYMENT_METHOD_OPTIONS } from '../../payment/domain/payment-method.enum';
+import { SHIPPING_SERVICE } from '../../shipping/application/ports/inbound/shipping-service.port';
+import type { IShippingService } from '../../shipping/application/ports/inbound/shipping-service.port';
+import { ChatbotConfigService } from '../chatbot-config.service';
 import type { InternalToolCall } from '../llm/llm-client.interface';
-
-const COMPANY_INFO = {
-  horarios_de_entrega:     'Lunes a sábado de 9:00 a 18:00 hs. Sin servicio domingos ni feriados nacionales.',
-  intentos_de_entrega:     'Realizamos hasta 3 intentos de entrega. Tras 3 intentos fallidos el pedido se cancela automáticamente.',
-  costos_de_envio:         'El costo varía según el método de envío y la zona seleccionados al momento de la compra.',
-  facturacion:             'Podés solicitar factura por este chat para pedidos entregados dentro del mismo mes de entrega. Necesitás tu CUIT de 11 dígitos.',
-  devolucion:              'Escribinos a soporte indicando número de pedido y motivo. Procesamos la devolución en hasta 5 días hábiles.',
-  contacto:                'soporte@virtualpet.com | 0800-333-7387 (PETS) | Lunes a viernes 9:00-17:00 hs',
-};
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
   RECEIVED:       'Pedido recibido',
@@ -24,13 +23,17 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
 @Injectable()
 export class ToolExecutor {
   constructor(
-    @Inject(ORDER_SERVICE) private readonly orderService: IOrderService,
+    @Inject(ORDER_SERVICE)    private readonly orderService:    IOrderService,
+    @Inject(PRODUCT_SERVICE)  private readonly productService:  IProductService,
+    @Inject(CATEGORY_SERVICE) private readonly categoryService: ICategoryService,
+    @Inject(SHIPPING_SERVICE) private readonly shippingService: IShippingService,
+    private readonly configService: ChatbotConfigService,
   ) {}
 
   async execute(toolCall: InternalToolCall, userId: string): Promise<string> {
     switch (toolCall.name) {
       case 'consultar_informacion_empresa':
-        return JSON.stringify(COMPANY_INFO);
+        return JSON.stringify(await this.configService.getCompanyInfo());
 
       case 'consultar_mis_pedidos':
         return this.consultarMisPedidos(userId);
@@ -43,6 +46,18 @@ export class ToolExecutor {
           toolCall.input as { orderId: string; cuit: string },
           userId,
         );
+
+      case 'consultar_productos':
+        return this.consultarProductos(toolCall.input as { search?: string });
+
+      case 'consultar_categorias':
+        return this.consultarCategorias();
+
+      case 'consultar_metodos_pago':
+        return this.consultarMetodosPago();
+
+      case 'consultar_metodos_envio':
+        return this.consultarMetodosEnvio();
 
       default:
         return JSON.stringify({ error: `Tool desconocida: ${toolCall.name}` });
@@ -106,6 +121,66 @@ export class ToolExecutor {
         return JSON.stringify({ ok: false, error: (err as Error).message });
       }
       return JSON.stringify({ ok: false, error: 'No se pudo registrar la solicitud de facturación' });
+    }
+  }
+
+  private async consultarProductos(input: { search?: string }): Promise<string> {
+    try {
+      const result = await this.productService.findAll({
+        search: input.search,
+        active: true,
+        limit:  12,
+      }) as { data: { id: string; name: string; slug: string; description: string | null }[] };
+      const productos = result.data.map(p => ({
+        id:          p.id,
+        nombre:      p.name,
+        slug:        p.slug,
+        descripcion: p.description ?? '',
+      }));
+      return JSON.stringify({ productos, total: productos.length });
+    } catch {
+      return JSON.stringify({ error: 'No se pudo obtener el catálogo de productos' });
+    }
+  }
+
+  private async consultarCategorias(): Promise<string> {
+    try {
+      const categories = await this.categoryService.findAll() as { id: string; name: string; slug: string; children?: unknown[] }[];
+      const categorias = categories.map(c => ({
+        id:     c.id,
+        nombre: c.name,
+        slug:   c.slug,
+        subcategorias: Array.isArray(c.children) ? (c.children as { name: string }[]).map(ch => ch.name) : [],
+      }));
+      return JSON.stringify({ categorias });
+    } catch {
+      return JSON.stringify({ error: 'No se pudieron obtener las categorías' });
+    }
+  }
+
+  private consultarMetodosPago(): string {
+    const metodos = PAYMENT_METHOD_OPTIONS.map(m => ({
+      codigo:      m.code,
+      nombre:      m.name,
+      descripcion: m.description,
+    }));
+    return JSON.stringify({ metodos_de_pago: metodos });
+  }
+
+  private async consultarMetodosEnvio(): Promise<string> {
+    try {
+      const methods = await this.shippingService.getShippingMethods();
+      const metodos = methods.map(m => ({
+        id:             m.id,
+        nombre:         m.name,
+        descripcion:    m.description ?? '',
+        precio_base:    `$${Number(m.basePrice).toLocaleString('es-AR')} ARS`,
+        dias_estimados: m.estimatedDays ?? null,
+        activo:         m.active,
+      }));
+      return JSON.stringify({ metodos_de_envio: metodos });
+    } catch {
+      return JSON.stringify({ error: 'No se pudieron obtener los métodos de envío' });
     }
   }
 }

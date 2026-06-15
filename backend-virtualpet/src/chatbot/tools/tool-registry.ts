@@ -37,6 +37,53 @@ export class ToolRegistry {
         },
       },
       {
+        name: 'consultar_productos',
+        description:
+          'Busca productos disponibles en el catálogo de VirtualPet. ' +
+          'Devuelve nombre, descripción y slug de los productos activos. ' +
+          'Usá este tool cuando el usuario pregunte qué productos hay, busque algo específico, ' +
+          'o quiera saber qué hay disponible en la tienda.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            search: {
+              type: 'string',
+              description: 'Término de búsqueda (nombre o descripción del producto). Omitir para listar todos.',
+            },
+          },
+        },
+      },
+      {
+        name: 'consultar_categorias',
+        description:
+          'Devuelve el listado de categorías de productos disponibles en VirtualPet. ' +
+          'Usá este tool cuando el usuario pregunte qué tipos de productos o categorías hay.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'consultar_metodos_pago',
+        description:
+          'Devuelve los métodos de pago aceptados en VirtualPet (efectivo, tarjeta de crédito, débito, transferencia). ' +
+          'Usá este tool cuando el usuario pregunte cómo puede pagar.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'consultar_metodos_envio',
+        description:
+          'Devuelve los métodos de envío disponibles con nombre, descripción, precio base y días estimados de entrega. ' +
+          'Usá este tool cuando el usuario pregunte sobre opciones de envío, costos o tiempos de entrega.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
         name: 'solicitar_facturacion',
         description:
           'Registra que un pedido debe ser facturado a un CUIT. ' +
