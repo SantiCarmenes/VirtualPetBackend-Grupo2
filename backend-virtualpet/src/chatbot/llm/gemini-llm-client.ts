@@ -56,7 +56,7 @@ export class GeminiLlmClient implements ILlmClient {
 
   constructor() {
     this.apiKey = process.env.LLM_API_KEY ?? '';
-    this.model  = process.env.LLM_MODEL ?? 'gemini-1.5-flash';
+    this.model  = process.env.LLM_MODEL ?? 'gemini-2.5-flash-lite';
 
     if (!this.apiKey) {
       this.logger.warn('LLM_API_KEY is not set — chatbot LLM calls will fail');
@@ -92,7 +92,16 @@ export class GeminiLlmClient implements ILlmClient {
     const data = (await raw.json()) as GeminiResponse;
 
     if (!raw.ok || data.error) {
-      this.logger.error('Gemini API error', data.error ?? raw.status);
+      const apiStatus = (data.error as any)?.status ?? '';
+      if (raw.status === 429 || apiStatus === 'RESOURCE_EXHAUSTED') {
+        this.logger.warn('Gemini quota exhausted (429 RESOURCE_EXHAUSTED)');
+        return {
+          textContent: 'Estoy un poco ocupado en este momento 🐾 Esperá unos segundos y volvé a escribirme.',
+          toolCalls:   [],
+          stopReason:  'end_turn',
+        };
+      }
+      this.logger.error('Gemini API error', { status: apiStatus || raw.status, body: data.error });
       throw new InternalServerErrorException('El servicio de IA no está disponible en este momento');
     }
 

@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { MAX_AGENT_ITERATIONS, SYSTEM_PROMPT } from './chatbot.constants';
+import { ChatbotConfigService } from './chatbot-config.service';
+import { MAX_AGENT_ITERATIONS } from './chatbot.constants';
 import { LLM_CLIENT } from './llm/llm-client.interface';
 import type { ILlmClient, InternalMessage } from './llm/llm-client.interface';
 import { ToolRegistry } from './tools/tool-registry';
@@ -11,15 +12,17 @@ export class ChatbotService {
 
   constructor(
     @Inject(LLM_CLIENT) private readonly llmClient: ILlmClient,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly toolExecutor: ToolExecutor,
+    private readonly toolRegistry:    ToolRegistry,
+    private readonly toolExecutor:    ToolExecutor,
+    private readonly configService:   ChatbotConfigService,
   ) {}
 
   async processMessage(
     userMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
     userId: string,
   ): Promise<string> {
-    const tools = this.toolRegistry.getTools();
+    const tools        = this.toolRegistry.getTools();
+    const systemPrompt = await this.configService.getSystemPrompt();
 
     let messages: InternalMessage[] = userMessages.map(m => ({
       role:    m.role,
@@ -27,7 +30,7 @@ export class ChatbotService {
     }));
 
     for (let i = 0; i < MAX_AGENT_ITERATIONS; i++) {
-      const response = await this.llmClient.chat(SYSTEM_PROMPT, messages, tools);
+      const response = await this.llmClient.chat(systemPrompt, messages, tools);
 
       if (response.stopReason === 'error') {
         return 'Lo siento, hubo un problema al procesar tu consulta. Intentá de nuevo en unos momentos.';

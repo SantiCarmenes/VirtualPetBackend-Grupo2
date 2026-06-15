@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["user", "auth", "catalog", "order", "inventory", "payment", "shipping"]
+  schemas  = ["user", "auth", "catalog", "order", "inventory", "payment", "shipping", "chatbot"]
 }
 
 enum Role {
@@ -479,4 +479,16 @@ model StockReservation {
 
   @@map("stock_reservation")
   @@schema("inventory")
+}
+
+// ─── CHATBOT ────────────────────────────────────────────────────────────────
+
+model ChatbotConfig {
+  id           String   @id @default("default")
+  systemPrompt String   @map("system_prompt") @db.Text
+  companyInfo  Json     @map("company_info")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("config")
+  @@schema("chatbot")
 }
