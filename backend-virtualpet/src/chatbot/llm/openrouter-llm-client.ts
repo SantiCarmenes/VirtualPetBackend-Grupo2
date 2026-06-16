@@ -7,30 +7,31 @@ import type {
   LlmTool,
 } from './llm-client.interface';
 
-// ─── Groq / OpenAI-compatible API types ─────────────────────────────────────
+// ─── OpenRouter / OpenAI-compatible API types ────────────────────────────────
 
-interface GroqMessage {
+interface ORMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
-  tool_calls?: GroqToolCall[];
+  tool_calls?: ORToolCall[];
   tool_call_id?: string;
 }
 
-interface GroqToolCall {
+interface ORToolCall {
   id: string;
   type: 'function';
   function: { name: string; arguments: string };
 }
 
-interface GroqRequest {
-  model: string;
-  messages: GroqMessage[];
-  tools?: GroqToolDefinition[];
+interface ORRequest {
+  model?: string;
+  models?: string[];
+  messages: ORMessage[];
+  tools?: ORToolDefinition[];
   tool_choice?: 'auto' | 'none';
   max_tokens?: number;
 }
 
-interface GroqToolDefinition {
+interface ORToolDefinition {
   type: 'function';
   function: {
     name: string;
@@ -43,12 +44,12 @@ interface GroqToolDefinition {
   };
 }
 
-interface GroqResponse {
+interface ORResponse {
   choices?: Array<{
     message: {
       role: string;
       content: string | null;
-      tool_calls?: GroqToolCall[];
+      tool_calls?: ORToolCall[];
     };
     finish_reason: string;
   }>;
@@ -58,15 +59,23 @@ interface GroqResponse {
 // ─── Client ─────────────────────────────────────────────────────────────────
 
 @Injectable()
-export class GroqLlmClient implements ILlmClient {
-  private readonly logger = new Logger(GroqLlmClient.name);
+export class OpenRouterLlmClient implements ILlmClient {
+  private readonly logger  = new Logger(OpenRouterLlmClient.name);
   private readonly apiKey: string;
-  private readonly model: string;
-  private readonly baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
+  private readonly model:  string;
+  private readonly baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
+
+  private readonly modelFallback: string;
+  // Optional headers recommended by OpenRouter for attribution/ranking
+  private readonly siteUrl: string;
+  private readonly appName: string;
 
   constructor() {
-    this.apiKey = process.env.LLM_API_KEY ?? '';
-    this.model  = process.env.LLM_MODEL ?? 'llama-3.3-70b-versatile';
+    this.apiKey        = process.env.LLM_API_KEY        ?? '';
+    this.model         = process.env.LLM_MODEL          ?? 'meta-llama/llama-3.3-70b-instruct';
+    this.modelFallback = process.env.LLM_MODEL_FALLBACK ?? '';
+    this.siteUrl       = process.env.OR_SITE_URL        ?? '';
+    this.appName       = process.env.OR_APP_NAME        ?? 'VirtualPet';
 
     if (!this.apiKey) {
       this.logger.warn('LLM_API_KEY is not set — chatbot LLM calls will fail');
@@ -78,49 +87,55 @@ export class GroqLlmClient implements ILlmClient {
     messages: InternalMessage[],
     tools: LlmTool[],
   ): Promise<LlmResponse> {
-    const groqMessages: GroqMessage[] = [
+    const orMessages: ORMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...this.toGroqMessages(messages),
+      ...this.toORMessages(messages),
     ];
 
-    const body: GroqRequest = {
-      model:      this.model,
-      messages:   groqMessages,
+    const body: ORRequest = {
+      ...(this.modelFallback
+        ? { models: [this.model, this.modelFallback] }
+        : { model:   this.model }),
+      messages:   orMessages,
       max_tokens: 1024,
     };
 
     if (tools.length) {
-      body.tools       = this.toGroqTools(tools);
+      body.tools       = this.toORTools(tools);
       body.tool_choice = 'auto';
     }
+
+    const headers: Record<string, string> = {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+    };
+    if (this.siteUrl) headers['HTTP-Referer'] = this.siteUrl;
+    if (this.appName) headers['X-Title']      = this.appName;
 
     let raw: Response;
     try {
       raw = await fetch(this.baseUrl, {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify(body),
+        method: 'POST',
+        headers,
+        body:   JSON.stringify(body),
       });
     } catch (err) {
-      this.logger.error('Network error calling Groq', err);
+      this.logger.error('Network error calling OpenRouter', err);
       throw new InternalServerErrorException('Error al conectar con el servicio de IA');
     }
 
-    const data = (await raw.json()) as GroqResponse;
+    const data = (await raw.json()) as ORResponse;
 
     if (!raw.ok || data.error) {
       if (raw.status === 429) {
-        this.logger.warn('Groq rate limit hit (429)');
+        this.logger.warn('OpenRouter rate limit hit (429)');
         return {
           textContent: 'Estoy un poco ocupado en este momento 🐾 Esperá unos segundos y volvé a escribirme.',
           toolCalls:   [],
           stopReason:  'end_turn',
         };
       }
-      this.logger.error('Groq API error', { status: raw.status, error: data.error });
+      this.logger.error('OpenRouter API error', { status: raw.status, error: data.error });
       throw new InternalServerErrorException('El servicio de IA no está disponible en este momento');
     }
 
@@ -131,9 +146,6 @@ export class GroqLlmClient implements ILlmClient {
 
     const { message } = choice;
 
-    // Check tool_calls by presence — some Llama models return finish_reason:'stop'
-    // even when tool_calls are present. Content is discarded when tool calls exist
-    // because Llama often mirrors the call syntax inside the text (e.g. <function=...>).
     if (message.tool_calls?.length) {
       const toolCalls: InternalToolCall[] = message.tool_calls.map(tc => ({
         id:    tc.id,
@@ -143,8 +155,7 @@ export class GroqLlmClient implements ILlmClient {
       return { textContent: '', toolCalls, stopReason: 'tool_use' };
     }
 
-    // Fallback: some Llama models output tool calls as text (<function=name>args</function>)
-    // instead of using the structured API. Parse and handle them the same way.
+    // Fallback: some models (e.g. Llama variants) output tool calls as text
     const textContent = message.content ?? '';
     const textCalls   = this.parseTextFunctionCalls(textContent);
     if (textCalls.length) {
@@ -156,14 +167,14 @@ export class GroqLlmClient implements ILlmClient {
 
   // ─── Conversion helpers ──────────────────────────────────────────────────
 
-  private toGroqMessages(messages: InternalMessage[]): GroqMessage[] {
+  private toORMessages(messages: InternalMessage[]): ORMessage[] {
     return messages.map(msg => {
       if (msg.role === 'user') {
         return { role: 'user' as const, content: msg.content };
       }
 
       if (msg.role === 'assistant') {
-        const out: GroqMessage = { role: 'assistant', content: msg.content || null };
+        const out: ORMessage = { role: 'assistant', content: msg.content || null };
         if (msg.toolCalls?.length) {
           out.tool_calls = msg.toolCalls.map(tc => ({
             id:       tc.id,
@@ -183,7 +194,7 @@ export class GroqLlmClient implements ILlmClient {
     });
   }
 
-  private toGroqTools(tools: LlmTool[]): GroqToolDefinition[] {
+  private toORTools(tools: LlmTool[]): ORToolDefinition[] {
     return tools.map(t => ({
       type: 'function' as const,
       function: {

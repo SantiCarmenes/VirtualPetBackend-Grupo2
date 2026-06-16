@@ -7,6 +7,7 @@ import { ChatbotController } from './chatbot.controller';
 import { ChatbotService } from './chatbot.service';
 import { GeminiLlmClient } from './llm/gemini-llm-client';
 import { GroqLlmClient } from './llm/groq-llm-client';
+import { OpenRouterLlmClient } from './llm/openrouter-llm-client';
 import { LLM_CLIENT } from './llm/llm-client.interface';
 import { ToolExecutor } from './tools/tool-executor';
 import { ToolRegistry } from './tools/tool-registry';
@@ -23,8 +24,9 @@ import { ToolRegistry } from './tools/tool-registry';
       provide:    LLM_CLIENT,
       useFactory: () => {
         const registry = {
-          gemini: GeminiLlmClient,
-          groq:   GroqLlmClient,
+          gemini:      GeminiLlmClient,
+          groq:        GroqLlmClient,
+          openrouter:  OpenRouterLlmClient,
         };
         const name = process.env.LLM_PROVIDER?.toLowerCase();
         if (!name) {

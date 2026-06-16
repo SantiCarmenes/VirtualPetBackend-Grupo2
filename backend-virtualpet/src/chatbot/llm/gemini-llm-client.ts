@@ -114,7 +114,7 @@ export class GeminiLlmClient implements ILlmClient {
     const parts = candidate.content.parts ?? [];
 
     const textContent = parts
-      .filter(p => typeof p.text === 'string')
+      .filter(p => typeof p.text === 'string' && !p.thought)
       .map(p => p.text!)
       .join('');
 
