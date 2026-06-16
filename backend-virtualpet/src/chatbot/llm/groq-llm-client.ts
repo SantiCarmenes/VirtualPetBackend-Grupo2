@@ -129,15 +129,18 @@ export class GroqLlmClient implements ILlmClient {
       return { textContent: '', toolCalls: [], stopReason: 'error' };
     }
 
-    const { message, finish_reason } = choice;
+    const { message } = choice;
 
-    if (finish_reason === 'tool_calls' && message.tool_calls?.length) {
+    // Check tool_calls by presence — some Llama models return finish_reason:'stop'
+    // even when tool_calls are present. Content is discarded when tool calls exist
+    // because Llama often mirrors the call syntax inside the text (e.g. <function=...>).
+    if (message.tool_calls?.length) {
       const toolCalls: InternalToolCall[] = message.tool_calls.map(tc => ({
         id:    tc.id,
         name:  tc.function.name,
         input: this.parseArgs(tc.function.arguments),
       }));
-      return { textContent: message.content ?? '', toolCalls, stopReason: 'tool_use' };
+      return { textContent: '', toolCalls, stopReason: 'tool_use' };
     }
 
     return {
