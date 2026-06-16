@@ -11,7 +11,8 @@ import type {
 
 interface GeminiPart {
   text?: string;
-  functionCall?: { name: string; args: Record<string, unknown> };
+  thought?: boolean;
+  functionCall?: { name: string; args: Record<string, unknown>; thought_signature?: string };
   functionResponse?: { name: string; response: { content: string } };
 }
 
@@ -119,11 +120,18 @@ export class GeminiLlmClient implements ILlmClient {
 
     const toolCalls: InternalToolCall[] = parts
       .filter(p => p.functionCall)
-      .map((p, i) => ({
-        id:    `call-${Date.now()}-${i}`,
-        name:  p.functionCall!.name,
-        input: p.functionCall!.args ?? {},
-      }));
+      .map((p, i) => {
+        const fc = p.functionCall!;
+        const tc: InternalToolCall = {
+          id:    `call-${Date.now()}-${i}`,
+          name:  fc.name,
+          input: fc.args ?? {},
+        };
+        if (fc.thought_signature) {
+          tc.metadata = { thoughtSignature: fc.thought_signature };
+        }
+        return tc;
+      });
 
     const stopReason = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
 
@@ -150,7 +158,11 @@ export class GeminiLlmClient implements ILlmClient {
         if (msg.content) parts.push({ text: msg.content });
         if (msg.toolCalls?.length) {
           for (const tc of msg.toolCalls) {
-            parts.push({ functionCall: { name: tc.name, args: tc.input } });
+            const fc: GeminiPart['functionCall'] = { name: tc.name, args: tc.input };
+            if (tc.metadata?.thoughtSignature) {
+              fc.thought_signature = tc.metadata.thoughtSignature as string;
+            }
+            parts.push({ functionCall: fc });
           }
         }
         result.push({ role: 'model', parts });

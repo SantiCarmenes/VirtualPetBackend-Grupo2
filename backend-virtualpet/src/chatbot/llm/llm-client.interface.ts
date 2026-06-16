@@ -17,6 +17,8 @@ export interface InternalToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /** Provider-specific extras (e.g. Gemini thought_signature). Ignored by other providers. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface LlmTool {
