@@ -52,6 +52,15 @@ export class OrderController {
     return this.orderService.getOrderStats();
   }
 
+  @Get('available')
+  @Roles('RIDER' as any)
+  findAvailableOrders(
+    @Query('page',  new DefaultValuePipe(1),  ParseIntPipe) page:  number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.orderService.findAvailableOrders(page, limit);
+  }
+
   @Get('all')
   @Roles('BACKOFFICE')
   findAllOrders(
@@ -65,7 +74,7 @@ export class OrderController {
   @Get(':id')
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
     const order = await this.orderService.findOrderById(id);
-    if (user.role !== 'BACKOFFICE' && (order as any).userId !== user.id) {
+    if (user.role !== 'BACKOFFICE' && (user.role as string) !== 'RIDER' && (order as any).userId !== user.id) {
       throw new ForbiddenException('No tenés acceso a esta orden');
     }
     return order;
@@ -97,5 +106,26 @@ export class OrderController {
     @Body() dto: ApplyPromotionDto,
   ) {
     return this.promotionService.applyPromotion(user.id, id, dto);
+  }
+
+  @Post(':id/pickup')
+  @Roles('RIDER' as any)
+  @HttpCode(HttpStatus.OK)
+  riderPickup(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.orderService.riderPickup(id, user.id);
+  }
+
+  @Post(':id/deliver')
+  @Roles('RIDER' as any) 
+  @HttpCode(HttpStatus.OK)
+  riderDeliver(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.orderService.riderDeliver(id, user.id);
+  }
+
+  @Post(':id/return')
+  @Roles('RIDER' as any) 
+  @HttpCode(HttpStatus.OK)
+  riderReturn(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.orderService.riderReturn(id, user.id);
   }
 }

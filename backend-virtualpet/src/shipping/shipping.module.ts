@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { UserModule } from '../user/user.module';
 import { ShippingController } from './infrastructure/http/shipping.controller';
 import { ShippingRepository } from './infrastructure/persistence/shipping.repository';
 import { ShippingService } from './application/shipping.service';
@@ -7,7 +8,7 @@ import { SHIPPING_SERVICE } from './application/ports/inbound/shipping-service.p
 import { SHIPPING_REPOSITORY } from './application/ports/outbound/shipping-repository.port';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, UserModule],
   controllers: [ShippingController],
   providers: [
     ShippingRepository,

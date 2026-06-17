@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -20,11 +21,12 @@ import type { IOrderService, OrderStats } from '../interfaces/order-service.inte
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
-const ALLOWED_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+// Transiciones permitidas desde el panel de backoffice.
+// La progresión IN_TRANSIT → DELIVERED / NOT_DELIVERED es exclusiva del rider.
+const BACKOFFICE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
-  [OrderStatus.IN_PREPARATION]: [OrderStatus.IN_TRANSIT,     OrderStatus.CANCELLED],
-  [OrderStatus.IN_TRANSIT]:     [OrderStatus.DELIVERED,      OrderStatus.NOT_DELIVERED],
-  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.IN_TRANSIT,     OrderStatus.CANCELLED],
+  [OrderStatus.IN_PREPARATION]: [OrderStatus.CANCELLED],
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED],
 };
 
 @Injectable()
@@ -65,43 +67,19 @@ export class OrderService implements IOrderService {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
 
-    const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
+    const allowed = BACKOFFICE_TRANSITIONS[order.status] ?? [];
     if (!allowed.includes(dto.status)) {
       throw new BadRequestException(`Transición inválida: ${order.status} → ${dto.status}`);
-    }
-
-    if (dto.status === OrderStatus.IN_TRANSIT && order.deliveryAttempts === 0) {
-      await this.stockService.confirmReservation(orderId);
     }
 
     if (dto.status === OrderStatus.CANCELLED && order.deliveryAttempts === 0) {
       await this.stockService.releaseReservation(orderId);
     }
 
-    let updateData: Prisma.OrderUpdateInput = { status: dto.status };
-
-    if (dto.status === OrderStatus.NOT_DELIVERED) {
-      const newAttempts = order.deliveryAttempts + 1;
-      if (newAttempts >= MAX_DELIVERY_ATTEMPTS) {
-        updateData = { status: OrderStatus.CANCELLED, deliveryAttempts: newAttempts, nextDeliveryAt: null };
-      } else {
-        const nextDelivery = new Date();
-        nextDelivery.setHours(nextDelivery.getHours() + 24);
-        updateData = { status: OrderStatus.NOT_DELIVERED, deliveryAttempts: newAttempts, nextDeliveryAt: nextDelivery };
-      }
-    }
-
-    const updated = await this.orderRepository.updateOrder(orderId, updateData);
+    const updated = await this.orderRepository.updateOrder(orderId, { status: dto.status });
 
     await this.orderRepository.addStatusHistory(orderId, updated.status);
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);
-
-    if (updated.status === OrderStatus.IN_TRANSIT) {
-      const tracking = dto.trackingNumber ?? `TRK-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.SHIPPED, tracking).catch(() => {});
-    } else if (updated.status === OrderStatus.DELIVERED) {
-      void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
-    }
 
     return updated;
   }
@@ -184,15 +162,80 @@ export class OrderService implements IOrderService {
     return this.orderRepository.requestInvoice(orderId, cuit);
   }
 
-  async processPendingReschedules(): Promise<void> {
-    const orders = await this.orderRepository.findOrdersPendingReschedule();
-    for (const order of orders) {
-      const updated = await this.orderRepository.updateOrder(order.id, {
-        status: OrderStatus.IN_TRANSIT,
-        nextDeliveryAt: null,
-      });
-      await this.orderRepository.addStatusHistory(order.id, OrderStatus.IN_TRANSIT);
-      void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
+  // ─── Rider methods ────────────────────────────────────────────────────────
+
+  async findAvailableOrders(page: number, limit: number) {
+    return this.orderRepository.findOrdersByStatuses(
+      [OrderStatus.IN_PREPARATION, OrderStatus.NOT_DELIVERED],
+      page,
+      limit,
+    );
+  }
+
+  async riderPickup(orderId: string, riderId: string) {
+    const order = await this.orderRepository.findOrderById(orderId);
+    if (!order) throw new NotFoundException('Orden no encontrada');
+
+    const pickupAllowed = [OrderStatus.IN_PREPARATION, OrderStatus.NOT_DELIVERED];
+    if (!pickupAllowed.includes(order.status)) {
+      throw new BadRequestException('La orden no está disponible para ser tomada');
     }
+
+    await this.shippingService.assignRider(orderId, riderId);
+
+    // Stock ya fue confirmado en el primer intento; solo confirmar si es la primera vez
+    if (order.status === OrderStatus.IN_PREPARATION) {
+      await this.stockService.confirmReservation(orderId);
+    }
+
+    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.IN_TRANSIT, nextDeliveryAt: null });
+    await this.orderRepository.addStatusHistory(orderId, OrderStatus.IN_TRANSIT);
+    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
+
+    return updated;
+  }
+
+  async riderDeliver(orderId: string, riderId: string) {
+    const order = await this.orderRepository.findOrderById(orderId);
+    if (!order) throw new NotFoundException('Orden no encontrada');
+    if (order.status !== OrderStatus.IN_TRANSIT) {
+      throw new BadRequestException('La orden no está en tránsito');
+    }
+
+    const shipment = await this.shippingService.getShipmentByOrderId(orderId);
+    if (shipment.riderId !== riderId) {
+      throw new ForbiddenException('No tenés asignada esta orden');
+    }
+
+    void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
+
+    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.DELIVERED });
+    await this.orderRepository.addStatusHistory(orderId, OrderStatus.DELIVERED);
+    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.DELIVERED);
+
+    return updated;
+  }
+
+  async riderReturn(orderId: string, riderId: string) {
+    const order = await this.orderRepository.findOrderById(orderId);
+    if (!order) throw new NotFoundException('Orden no encontrada');
+    if (order.status !== OrderStatus.IN_TRANSIT) {
+      throw new BadRequestException('La orden no está en tránsito');
+    }
+
+    const shipment = await this.shippingService.getShipmentByOrderId(orderId);
+    if (shipment.riderId !== riderId) {
+      throw new ForbiddenException('No tenés asignada esta orden');
+    }
+
+    const newAttempts = order.deliveryAttempts + 1;
+    const newStatus  = newAttempts >= MAX_DELIVERY_ATTEMPTS ? OrderStatus.CANCELLED : OrderStatus.NOT_DELIVERED;
+    const updateData: Prisma.OrderUpdateInput = { status: newStatus, deliveryAttempts: newAttempts };
+
+    const updated = await this.orderRepository.updateOrder(orderId, updateData);
+    await this.orderRepository.addStatusHistory(orderId, updated.status);
+    void this.mailService.sendOrderStatusUpdate(updated, updated.status);
+
+    return updated;
   }
 }

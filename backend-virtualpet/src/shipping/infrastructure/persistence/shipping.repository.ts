@@ -47,4 +47,12 @@ export class ShippingRepository implements IShippingRepository {
       include: { method: true },
     });
   }
+
+  assignRider(orderId: string, riderId: string) {
+    return this.p.shipment.update({
+      where:   { orderId },
+      data:    { riderId, takenAt: new Date(), status: 'SHIPPED' },
+      include: { method: true },
+    });
+  }
 }

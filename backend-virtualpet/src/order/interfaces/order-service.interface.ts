@@ -52,4 +52,8 @@ export interface IOrderService {
   claimGuestOrders(email: string, userId: string): Promise<void>;
   processPaymentWebhook(orderId: string, result: 'approved' | 'rejected'): Promise<void>;
   requestInvoice(orderId: string, cuit: string, userId: string): Promise<Order>;
+  findAvailableOrders(page: number, limit: number): Promise<PaginatedOrders>;
+  riderPickup(orderId: string, riderId: string): Promise<Order>;
+  riderDeliver(orderId: string, riderId: string): Promise<Order>;
+  riderReturn(orderId: string, riderId: string): Promise<Order>;
 }

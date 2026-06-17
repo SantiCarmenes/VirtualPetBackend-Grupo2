@@ -9,6 +9,9 @@ export interface ShipmentResponse {
   orderId:           string;
   methodId:          string;
   methodName:        string;
+  riderId:           string | null;
+  riderName:         string | null;
+  takenAt:           Date | null;
   status:            string;
   trackingNumber:    string | null;
   estimatedDelivery: Date | null;
@@ -21,4 +24,5 @@ export interface IShippingService {
   createShipment(dto: CreateShipmentDto): Promise<ShipmentResponse>;
   getShipmentByOrderId(orderId: string): Promise<ShipmentResponse>;
   updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse>;
+  assignRider(orderId: string, riderId: string): Promise<ShipmentResponse>;
 }

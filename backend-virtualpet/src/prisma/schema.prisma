@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   CLIENT
   BACKOFFICE
+  RIDER
 
   @@schema("user")
 }
@@ -419,10 +420,13 @@ model ShippingMethod {
 }
 
 // orderId es campo plano, sin FK al schema order (cross-schema).
+// riderId es campo plano, sin FK al schema user (cross-schema).
 model Shipment {
   id                String         @id @default(uuid())
   orderId           String         @unique @map("order_id")
   methodId          String         @map("method_id")
+  riderId           String?        @map("rider_id")
+  takenAt           DateTime?      @map("taken_at")
   status            ShipmentStatus @default(PENDING)
   trackingNumber    String?        @map("tracking_number")
   estimatedDelivery DateTime?      @map("estimated_delivery")

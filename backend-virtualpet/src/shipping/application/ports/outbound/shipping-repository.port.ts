@@ -15,6 +15,8 @@ export interface ShipmentWithMethod {
   id:                string;
   orderId:           string;
   methodId:          string;
+  riderId:           string | null;
+  takenAt:           Date | null;
   status:            string;
   trackingNumber:    string | null;
   estimatedDelivery: Date | null;
@@ -33,4 +35,5 @@ export interface IShippingRepository {
   }): Promise<ShipmentWithMethod>;
   findShipmentByOrderId(orderId: string): Promise<ShipmentWithMethod | null>;
   updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentWithMethod>;
+  assignRider(orderId: string, riderId: string): Promise<ShipmentWithMethod>;
 }
