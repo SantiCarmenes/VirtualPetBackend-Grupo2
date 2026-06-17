@@ -4,4 +4,5 @@ export interface IStockService {
   reserveStock(orderId: string, items: { variantId: string; quantity: number }[]): Promise<void>;
   releaseReservation(orderId: string): Promise<void>;
   confirmReservation(orderId: string): Promise<void>;
+  getStockByVariant(variantId: string): Promise<{ variantId: string; quantityAvailable: number }>;
 }

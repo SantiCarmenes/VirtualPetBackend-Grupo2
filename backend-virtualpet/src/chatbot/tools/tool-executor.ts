@@ -3,6 +3,8 @@ import { CATEGORY_SERVICE } from '../../catalog/interfaces/category-service.inte
 import type { ICategoryService } from '../../catalog/interfaces/category-service.interface';
 import { PRODUCT_SERVICE } from '../../catalog/interfaces/product-service.interface';
 import type { IProductService } from '../../catalog/interfaces/product-service.interface';
+import { STOCK_SERVICE } from '../../inventory/interfaces/stock-service.interface';
+import type { IStockService } from '../../inventory/interfaces/stock-service.interface';
 import { ORDER_SERVICE } from '../../order/interfaces/order-service.interface';
 import type { IOrderService } from '../../order/interfaces/order-service.interface';
 import { PAYMENT_METHOD_OPTIONS } from '../../payment/domain/payment-method.enum';
@@ -27,10 +29,11 @@ export class ToolExecutor {
     @Inject(PRODUCT_SERVICE)  private readonly productService:  IProductService,
     @Inject(CATEGORY_SERVICE) private readonly categoryService: ICategoryService,
     @Inject(SHIPPING_SERVICE) private readonly shippingService: IShippingService,
+    @Inject(STOCK_SERVICE)    private readonly stockService:    IStockService,
     private readonly configService: ChatbotConfigService,
   ) {}
 
-  async execute(toolCall: InternalToolCall, userId: string): Promise<string> {
+  async execute(toolCall: InternalToolCall, userId: string | undefined): Promise<string> {
     switch (toolCall.name) {
       case 'consultar_informacion_empresa':
         return JSON.stringify(await this.configService.getCompanyInfo());
@@ -46,6 +49,9 @@ export class ToolExecutor {
           toolCall.input as { orderId: string; cuit: string },
           userId,
         );
+
+      case 'consultar_stock':
+        return this.consultarStock(toolCall.input as { search: string });
 
       case 'consultar_productos':
         return this.consultarProductos(toolCall.input as { search?: string });
@@ -64,7 +70,8 @@ export class ToolExecutor {
     }
   }
 
-  private async consultarMisPedidos(userId: string): Promise<string> {
+  private async consultarMisPedidos(userId: string | undefined): Promise<string> {
+    if (!userId) return JSON.stringify({ error: 'Necesitás iniciar sesión para ver tus pedidos' });
     try {
       const result = await this.orderService.findMyOrdersPaginated(userId, 1, 5);
       const orders = result.data.map(o => ({
@@ -82,19 +89,34 @@ export class ToolExecutor {
 
   private async consultarPedido(
     input: { orderId: string },
-    userId: string,
+    userId: string | undefined,
   ): Promise<string> {
     try {
       const order = await this.orderService.findOrderById(input.orderId);
       if ((order as any).userId !== userId) {
         return JSON.stringify({ error: 'No tenés acceso a ese pedido' });
       }
+      const items = ((order as any).items ?? []).map((i: any) => ({
+        producto:  i.productNameSnapshot,
+        sku:       i.skuSnapshot,
+        cantidad:  i.quantity,
+        precioUnit:`$${Number(i.unitPrice).toLocaleString('es-AR')} ARS`,
+        subtotal:  `$${Number(i.lineTotal).toLocaleString('es-AR')} ARS`,
+      }));
+      const shipment = (order as any).shipment;
+      const envio = shipment ? {
+        estado:          shipment.status,
+        metodo:          shipment.methodName ?? null,
+        rider:           shipment.riderName  ?? null,
+        nroSeguimiento:  shipment.trackingNumber ?? null,
+      } : null;
       return JSON.stringify({
         id:              order.id,
         estado:          ORDER_STATUS_LABEL[order.status] ?? order.status,
         total:           `$${Number(order.total).toLocaleString('es-AR')} ARS`,
         fecha:           new Date(order.createdAt).toLocaleDateString('es-AR'),
-        articulos:       (order as any).items?.length ?? 0,
+        productos:       items,
+        envio,
         requiereFactura: (order as any).requiresInvoice ?? false,
         cuitFactura:     (order as any).invoiceCuit ?? null,
       });
@@ -108,8 +130,9 @@ export class ToolExecutor {
 
   private async solicitarFacturacion(
     input: { orderId: string; cuit: string },
-    userId: string,
+    userId: string | undefined,
   ): Promise<string> {
+    if (!userId) return JSON.stringify({ ok: false, error: 'Necesitás iniciar sesión para solicitar facturación' });
     try {
       await this.orderService.requestInvoice(input.orderId, input.cuit, userId);
       return JSON.stringify({
@@ -121,6 +144,41 @@ export class ToolExecutor {
         return JSON.stringify({ ok: false, error: (err as Error).message });
       }
       return JSON.stringify({ ok: false, error: 'No se pudo registrar la solicitud de facturación' });
+    }
+  }
+
+  private async consultarStock(input: { search: string }): Promise<string> {
+    try {
+      const result = await this.productService.findAll({
+        search: input.search,
+        active: true,
+        limit:  5,
+      }) as { data: { name: string; variants: { id: string; sku: string; price: unknown }[] }[] };
+
+      if (!result.data.length) {
+        return JSON.stringify({ error: 'No se encontró ningún producto con ese nombre' });
+      }
+
+      const productos = await Promise.all(
+        result.data.map(async (p) => {
+          const variantes = await Promise.all(
+            (p.variants ?? []).map(async (v) => {
+              const stock = await this.stockService.getStockByVariant(v.id);
+              return {
+                sku:        v.sku,
+                precio:     `$${Number(v.price).toLocaleString('es-AR')} ARS`,
+                disponible: stock.quantityAvailable > 0,
+                cantidad:   stock.quantityAvailable,
+              };
+            }),
+          );
+          return { nombre: p.name, variantes };
+        }),
+      );
+
+      return JSON.stringify({ productos });
+    } catch {
+      return JSON.stringify({ error: 'No se pudo consultar el stock' });
     }
   }
 

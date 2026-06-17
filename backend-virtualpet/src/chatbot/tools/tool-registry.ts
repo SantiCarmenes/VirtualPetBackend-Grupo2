@@ -84,6 +84,24 @@ export class ToolRegistry {
         },
       },
       {
+        name: 'consultar_stock',
+        description:
+          'Consulta el stock disponible de un producto. ' +
+          'Devuelve cada variante (SKU, precio, cantidad disponible). ' +
+          'Usá este tool cuando el usuario pregunte si hay unidades disponibles, ' +
+          'si tienen un producto en stock, o cuántas unidades quedan.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            search: {
+              type: 'string',
+              description: 'Nombre o marca del producto a consultar (ej: "Royal Canin", "Pedigree 3kg")',
+            },
+          },
+          required: ['search'],
+        },
+      },
+      {
         name: 'solicitar_facturacion',
         description:
           'Registra que un pedido debe ser facturado a un CUIT. ' +

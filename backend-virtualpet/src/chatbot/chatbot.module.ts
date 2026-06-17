@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CatalogModule } from '../catalog/catalog.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { OrderModule } from '../order/order.module';
 import { ShippingModule } from '../shipping/shipping.module';
 import { ChatbotConfigService } from './chatbot-config.service';
@@ -13,7 +14,7 @@ import { ToolExecutor } from './tools/tool-executor';
 import { ToolRegistry } from './tools/tool-registry';
 
 @Module({
-  imports: [OrderModule, CatalogModule, ShippingModule],
+  imports: [OrderModule, CatalogModule, ShippingModule, InventoryModule],
   controllers: [ChatbotController],
   providers: [
     ChatbotConfigService,

@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ChatbotConfigService } from './chatbot-config.service';
-import { MAX_AGENT_ITERATIONS } from './chatbot.constants';
+import { MAX_AGENT_ITERATIONS, MAX_CONTEXT_MESSAGES } from './chatbot.constants';
 import { LLM_CLIENT } from './llm/llm-client.interface';
 import type { ILlmClient, InternalMessage } from './llm/llm-client.interface';
 import { ToolRegistry } from './tools/tool-registry';
@@ -19,12 +19,14 @@ export class ChatbotService {
 
   async processMessage(
     userMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
-    userId: string,
+    userId: string | undefined,
   ): Promise<string> {
     const tools        = this.toolRegistry.getTools();
     const systemPrompt = await this.configService.getSystemPrompt();
 
-    let messages: InternalMessage[] = userMessages.map(m => ({
+    const windowed = userMessages.slice(-MAX_CONTEXT_MESSAGES);
+
+    let messages: InternalMessage[] = windowed.map(m => ({
       role:    m.role,
       content: m.content,
     }));
