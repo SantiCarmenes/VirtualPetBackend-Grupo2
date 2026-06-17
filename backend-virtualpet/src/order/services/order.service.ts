@@ -176,8 +176,7 @@ export class OrderService implements IOrderService {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
 
-    const pickupAllowed = [OrderStatus.IN_PREPARATION, OrderStatus.NOT_DELIVERED];
-    if (!pickupAllowed.includes(order.status)) {
+    if (order.status !== OrderStatus.IN_PREPARATION && order.status !== OrderStatus.NOT_DELIVERED) {
       throw new BadRequestException('La orden no está disponible para ser tomada');
     }
 

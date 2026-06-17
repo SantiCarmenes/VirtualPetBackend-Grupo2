@@ -14,7 +14,6 @@ import { PROMOTION_SERVICE } from './interfaces/promotion-service.interface';
 import { OrderRepository } from './order.repository';
 import { CartService } from './services/cart.service';
 import { CheckoutService } from './services/checkout.service';
-import { DeliverySchedulerService } from './services/delivery-scheduler.service';
 import { OrderService } from './services/order.service';
 import { PromotionService } from './services/promotion.service';
 
@@ -27,7 +26,6 @@ import { PromotionService } from './services/promotion.service';
     CheckoutService,
     OrderService,
     PromotionService,
-    DeliverySchedulerService,
     { provide: CART_SERVICE,    useClass: CartService },
     { provide: CHECKOUT_SERVICE, useClass: CheckoutService },
     { provide: ORDER_SERVICE,   useClass: OrderService },
