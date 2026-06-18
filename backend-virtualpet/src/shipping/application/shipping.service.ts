@@ -54,8 +54,8 @@ export class ShippingService implements IShippingService {
       shipment = await this.shippingRepository.createShipment({ orderId, methodId: methods[0].id });
     }
 
-    if (shipment.riderId) {
-      throw new BadRequestException('Esta orden ya tiene un rider asignado');
+    if (shipment.riderId && shipment.status === ShipmentStatusEnum.SHIPPED) {
+      throw new BadRequestException('Esta orden ya tiene un rider asignado y está en camino');
     }
 
     const result = await this.shippingRepository.assignRider(orderId, riderId);
