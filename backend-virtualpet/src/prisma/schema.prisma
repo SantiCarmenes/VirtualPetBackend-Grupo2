@@ -238,6 +238,14 @@ enum OrderStatus {
   @@schema("order")
 }
 
+enum InvoiceStatus {
+  NONE
+  REQUIRED
+  DONE
+
+  @@schema("order")
+}
+
 // Sin @relation: userId es campo plano, no FK entre schemas (user schema).
 model Cart {
   id        String   @id @default(uuid())
@@ -288,8 +296,8 @@ model Order {
   appliedPromotions AppliedPromotion[]
   statusHistory     OrderStatusHistory[]
 
-  requiresInvoice Boolean  @default(false) @map("requires_invoice")
-  invoiceCuit     String?  @map("invoice_cuit")
+  invoiceStatus   InvoiceStatus @default(NONE) @map("invoice_status")
+  invoiceCuit     String?       @map("invoice_cuit")
 
   @@index([status, nextDeliveryAt])
   @@map("order")

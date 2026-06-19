@@ -117,7 +117,7 @@ export class ToolExecutor {
         fecha:           new Date(order.createdAt).toLocaleDateString('es-AR'),
         productos:       items,
         envio,
-        requiereFactura: (order as any).requiresInvoice ?? false,
+        estadoFactura:   (order as any).invoiceStatus ?? 'NONE',
         cuitFactura:     (order as any).invoiceCuit ?? null,
       });
     } catch (err) {

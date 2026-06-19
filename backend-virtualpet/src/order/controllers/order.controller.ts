@@ -108,6 +108,12 @@ export class OrderController {
     return this.promotionService.applyPromotion(user.id, id, dto);
   }
 
+  @Patch(':id/invoiced')
+  @Roles('BACKOFFICE')
+  markAsInvoiced(@Param('id') id: string) {
+    return this.orderService.markAsInvoiced(id);
+  }
+
   @Post(':id/pickup')
   @Roles('RIDER' as any)
   @HttpCode(HttpStatus.OK)

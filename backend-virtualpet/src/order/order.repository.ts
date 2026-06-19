@@ -180,7 +180,14 @@ export class OrderRepository {
   requestInvoice(id: string, cuit: string) {
     return this.prisma.order.update({
       where: { id },
-      data: { requiresInvoice: true, invoiceCuit: cuit },
+      data: { invoiceStatus: 'REQUIRED', invoiceCuit: cuit },
+    });
+  }
+
+  markAsInvoiced(id: string) {
+    return this.prisma.order.update({
+      where: { id },
+      data: { invoiceStatus: 'DONE' },
     });
   }
 

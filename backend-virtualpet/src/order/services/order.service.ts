@@ -144,7 +144,7 @@ export class OrderService implements IOrderService {
       );
     }
 
-    if (order.requiresInvoice) {
+    if (order.invoiceStatus !== 'NONE') {
       throw new BadRequestException('Este pedido ya tiene factura solicitada');
     }
 
@@ -160,6 +160,15 @@ export class OrderService implements IOrderService {
     }
 
     return this.orderRepository.requestInvoice(orderId, cuit);
+  }
+
+  async markAsInvoiced(orderId: string) {
+    const order = await this.orderRepository.findOrderById(orderId);
+    if (!order) throw new NotFoundException('Orden no encontrada');
+    if (order.invoiceStatus !== 'REQUIRED') {
+      throw new BadRequestException('Solo se puede facturar un pedido que requiere factura');
+    }
+    return this.orderRepository.markAsInvoiced(orderId);
   }
 
   // ─── Rider methods ────────────────────────────────────────────────────────
