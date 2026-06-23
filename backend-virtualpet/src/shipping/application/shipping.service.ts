@@ -37,28 +37,42 @@ export class ShippingService implements IShippingService {
     return this.toResponse(result);
   }
 
+  async getShipmentsByOrderId(orderId: string): Promise<ShipmentResponse[]> {
+    const results = await this.shippingRepository.findShipmentsByOrderId(orderId);
+    return Promise.all(results.map(s => this.toResponse(s)));
+  }
+
   async updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse> {
     const existing = await this.shippingRepository.findShipmentByOrderId(orderId);
     if (!existing) throw new NotFoundException('Envío no encontrado para esta orden');
-    const result = await this.shippingRepository.updateShipmentStatus(orderId, status, trackingNumber);
+    const result = await this.shippingRepository.updateShipmentStatus(existing.id, status, trackingNumber);
     return this.toResponse(result);
   }
 
   async assignRider(orderId: string, riderId: string): Promise<ShipmentResponse> {
-    let shipment = await this.shippingRepository.findShipmentByOrderId(orderId);
+    const shipment = await this.shippingRepository.findShipmentByOrderId(orderId);
 
-    if (!shipment) {
-      // Crear envío automáticamente con el método más económico disponible
-      const methods = await this.shippingRepository.findAllMethods();
-      if (!methods.length) throw new NotFoundException('No hay métodos de envío disponibles');
-      shipment = await this.shippingRepository.createShipment({ orderId, methodId: methods[0].id });
-    }
-
-    if (shipment.riderId && shipment.status === ShipmentStatusEnum.SHIPPED) {
+    if (shipment && shipment.riderId && shipment.status === ShipmentStatusEnum.SHIPPED) {
       throw new BadRequestException('Esta orden ya tiene un rider asignado y está en camino');
     }
 
-    const result = await this.shippingRepository.assignRider(orderId, riderId);
+    if (!shipment || shipment.status === ShipmentStatusEnum.NOT_DELIVERED) {
+      const methods = await this.shippingRepository.findAllMethods();
+      if (!methods.length) throw new NotFoundException('No hay métodos de envío disponibles');
+      const methodId = shipment?.methodId ?? methods[0].id;
+      const newShipment = await this.shippingRepository.createShipment({ orderId, methodId });
+      const result = await this.shippingRepository.assignRider(newShipment.id, riderId);
+      return this.toResponse(result);
+    }
+
+    const result = await this.shippingRepository.assignRider(shipment.id, riderId);
+    return this.toResponse(result);
+  }
+
+  async releaseShipment(orderId: string): Promise<ShipmentResponse> {
+    const shipment = await this.shippingRepository.findShipmentByOrderId(orderId);
+    if (!shipment) throw new NotFoundException('Envío no encontrado para esta orden');
+    const result = await this.shippingRepository.updateShipmentStatus(shipment.id, ShipmentStatusEnum.NOT_DELIVERED);
     return this.toResponse(result);
   }
 

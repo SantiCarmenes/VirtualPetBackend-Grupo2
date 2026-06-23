@@ -240,6 +240,8 @@ export class OrderService implements IOrderService {
     const newStatus  = newAttempts >= MAX_DELIVERY_ATTEMPTS ? OrderStatus.CANCELLED : OrderStatus.NOT_DELIVERED;
     const updateData: Prisma.OrderUpdateInput = { status: newStatus, deliveryAttempts: newAttempts };
 
+    await this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.NOT_DELIVERED);
+
     const updated = await this.orderRepository.updateOrder(orderId, updateData);
     await this.orderRepository.addStatusHistory(orderId, updated.status);
     void this.mailService.sendOrderStatusUpdate(updated, updated.status);

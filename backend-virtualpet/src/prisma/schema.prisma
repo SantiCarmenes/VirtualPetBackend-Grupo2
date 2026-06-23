@@ -409,6 +409,7 @@ enum ShipmentStatus {
   PROCESSING
   SHIPPED
   DELIVERED
+  NOT_DELIVERED
 
   @@schema("shipping")
 }
@@ -431,7 +432,7 @@ model ShippingMethod {
 // riderId es campo plano, sin FK al schema user (cross-schema).
 model Shipment {
   id                String         @id @default(uuid())
-  orderId           String         @unique @map("order_id")
+  orderId           String         @map("order_id")
   methodId          String         @map("method_id")
   riderId           String?        @map("rider_id")
   takenAt           DateTime?      @map("taken_at")
@@ -443,6 +444,7 @@ model Shipment {
 
   method ShippingMethod @relation(fields: [methodId], references: [id])
 
+  @@index([orderId], map: "shipment_order_id_idx")
   @@map("shipment")
   @@schema("shipping")
 }

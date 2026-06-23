@@ -23,6 +23,8 @@ export interface IShippingService {
   findShippingMethodById(id: string): Promise<ShippingMethodDto | null>;
   createShipment(dto: CreateShipmentDto): Promise<ShipmentResponse>;
   getShipmentByOrderId(orderId: string): Promise<ShipmentResponse>;
+  getShipmentsByOrderId(orderId: string): Promise<ShipmentResponse[]>;
   updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse>;
   assignRider(orderId: string, riderId: string): Promise<ShipmentResponse>;
+  releaseShipment(orderId: string): Promise<ShipmentResponse>;
 }
