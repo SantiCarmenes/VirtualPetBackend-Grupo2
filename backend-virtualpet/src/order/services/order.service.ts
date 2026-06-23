@@ -21,6 +21,11 @@ import type { IOrderService, OrderStats } from '../interfaces/order-service.inte
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
+/** Código de entrega de 6 dígitos que el cliente recibe por mail al ponerse en camino. */
+function generateDeliveryCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 // Transiciones permitidas desde el panel de backoffice.
 // La progresión IN_TRANSIT → DELIVERED / NOT_DELIVERED es exclusiva del rider.
 const BACKOFFICE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
@@ -196,14 +201,21 @@ export class OrderService implements IOrderService {
       await this.stockService.confirmReservation(orderId);
     }
 
-    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.IN_TRANSIT, nextDeliveryAt: null });
+    // Código de entrega nuevo en cada toma: el cliente lo recibe por mail al ponerse en camino.
+    const deliveryCode = generateDeliveryCode();
+
+    const updated = await this.orderRepository.updateOrder(orderId, {
+      status: OrderStatus.IN_TRANSIT,
+      nextDeliveryAt: null,
+      deliveryCode,
+    });
     await this.orderRepository.addStatusHistory(orderId, OrderStatus.IN_TRANSIT);
-    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
+    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT, deliveryCode);
 
     return updated;
   }
 
-  async riderDeliver(orderId: string, riderId: string) {
+  async riderDeliver(orderId: string, riderId: string, code: string) {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
     if (order.status !== OrderStatus.IN_TRANSIT) {
@@ -215,9 +227,13 @@ export class OrderService implements IOrderService {
       throw new ForbiddenException('No tenés asignada esta orden');
     }
 
+    if (!order.deliveryCode || order.deliveryCode !== code) {
+      throw new BadRequestException('Código de entrega incorrecto');
+    }
+
     void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
 
-    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.DELIVERED });
+    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.DELIVERED, deliveryCode: null });
     await this.orderRepository.addStatusHistory(orderId, OrderStatus.DELIVERED);
     void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.DELIVERED);
 

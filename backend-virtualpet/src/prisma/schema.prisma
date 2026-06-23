@@ -284,6 +284,7 @@ model Order {
   status            OrderStatus @default(RECEIVED)
   deliveryAttempts  Int         @default(0) @map("delivery_attempts")
   nextDeliveryAt    DateTime?   @map("next_delivery_at")
+  deliveryCode      String?     @map("delivery_code")
   subtotal          Decimal     @db.Decimal(10, 2)
   shippingCost      Decimal     @db.Decimal(10, 2) @map("shipping_cost")
   discountTotal     Decimal     @db.Decimal(10, 2) @map("discount_total")

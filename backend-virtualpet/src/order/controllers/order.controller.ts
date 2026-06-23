@@ -9,6 +9,7 @@ import { PaymentWebhookDto } from '../dto/payment-webhook.dto';
 import { CheckoutDto } from '../dto/checkout.dto';
 import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import { DeliverOrderDto } from '../dto/deliver-order.dto';
 import { CHECKOUT_SERVICE } from '../interfaces/checkout-service.interface';
 import type { ICheckoutService } from '../interfaces/checkout-service.interface';
 import { ORDER_SERVICE } from '../interfaces/order-service.interface';
@@ -122,10 +123,10 @@ export class OrderController {
   }
 
   @Post(':id/deliver')
-  @Roles('RIDER' as any) 
+  @Roles('RIDER' as any)
   @HttpCode(HttpStatus.OK)
-  riderDeliver(@CurrentUser() user: User, @Param('id') id: string) {
-    return this.orderService.riderDeliver(id, user.id);
+  riderDeliver(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: DeliverOrderDto) {
+    return this.orderService.riderDeliver(id, user.id, dto.code);
   }
 
   @Post(':id/return')
