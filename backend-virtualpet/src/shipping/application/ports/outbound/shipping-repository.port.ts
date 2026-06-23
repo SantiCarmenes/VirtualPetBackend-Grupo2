@@ -35,6 +35,8 @@ export interface IShippingRepository {
   }): Promise<ShipmentWithMethod>;
   findShipmentByOrderId(orderId: string): Promise<ShipmentWithMethod | null>;
   findShipmentsByOrderId(orderId: string): Promise<ShipmentWithMethod[]>;
+  /** orderId (distintos) que alguna vez tuvieron un envío asignado a este rider. */
+  findOrderIdsByRiderId(riderId: string): Promise<string[]>;
   updateShipmentStatus(shipmentId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentWithMethod>;
   assignRider(shipmentId: string, riderId: string): Promise<ShipmentWithMethod>;
 }

@@ -192,6 +192,39 @@ export class OrderService implements IOrderService {
     );
   }
 
+  // "Mis pedidos" del rider: en camino (IN_TRANSIT), entregados (DELIVERED) o
+  // devueltos (NOT_DELIVERED). Cuando backoffice cancela o vuelve a preparar, el
+  // pedido sale de estos estados y deja de aparecer automáticamente.
+  async findRiderOrders(riderId: string, page: number, limit: number) {
+    const orderIds = await this.shippingService.findOrderIdsByRiderId(riderId);
+    if (orderIds.length === 0) {
+      return { data: [], pagination: { total: 0, page, limit, pages: 0 } };
+    }
+
+    // El volumen por rider es chico: traigo todas y luego filtro por el envío
+    // más reciente (cada toma crea un envío nuevo, así un pedido reasignado a
+    // otro rider no aparece como propio).
+    const { data: orders } = await this.orderRepository.findOrdersByIdsAndStatuses(
+      orderIds,
+      [OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED, OrderStatus.NOT_DELIVERED],
+      1,
+      1000,
+    );
+
+    const withShipment: any[] = [];
+    for (const o of orders) {
+      const shipment = await this.shippingService.getShipmentByOrderId(o.id).catch(() => null);
+      if (shipment && shipment.riderId === riderId) {
+        withShipment.push({ ...o, shipment });
+      }
+    }
+
+    const total = withShipment.length;
+    const start = (page - 1) * limit;
+    const data  = withShipment.slice(start, start + limit);
+    return { data, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
   async riderPickup(orderId: string, riderId: string) {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');

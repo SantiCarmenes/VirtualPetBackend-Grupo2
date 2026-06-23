@@ -49,6 +49,15 @@ export class ShippingRepository implements IShippingRepository {
     });
   }
 
+  async findOrderIdsByRiderId(riderId: string): Promise<string[]> {
+    const rows = await this.p.shipment.findMany({
+      where: { riderId },
+      select: { orderId: true },
+      distinct: ['orderId'],
+    });
+    return rows.map((r: { orderId: string }) => r.orderId);
+  }
+
   updateShipmentStatus(shipmentId: string, status: ShipmentStatusEnum, trackingNumber?: string) {
     return this.p.shipment.update({
       where:   { id: shipmentId },

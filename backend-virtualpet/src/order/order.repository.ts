@@ -125,6 +125,22 @@ export class OrderRepository {
     return { data, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 
+  async findOrdersByIdsAndStatuses(ids: string[], statuses: OrderStatus[], page: number, limit: number) {
+    const skip  = (page - 1) * limit;
+    const where: Prisma.OrderWhereInput = { id: { in: ids }, status: { in: statuses } };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        include: { items: true },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+    return { data, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
+  }
+
   async findAllOrdersPaginated(page: number, limit: number, status?: OrderStatus) {
     const skip = (page - 1) * limit;
     const where: Prisma.OrderWhereInput = status ? { status } : {};

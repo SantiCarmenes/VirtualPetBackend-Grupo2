@@ -24,6 +24,8 @@ export interface IShippingService {
   createShipment(dto: CreateShipmentDto): Promise<ShipmentResponse>;
   getShipmentByOrderId(orderId: string): Promise<ShipmentResponse>;
   getShipmentsByOrderId(orderId: string): Promise<ShipmentResponse[]>;
+  /** orderId (distintos) que alguna vez tuvieron un envío asignado a este rider. */
+  findOrderIdsByRiderId(riderId: string): Promise<string[]>;
   updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string): Promise<ShipmentResponse>;
   assignRider(orderId: string, riderId: string): Promise<ShipmentResponse>;
   releaseShipment(orderId: string): Promise<ShipmentResponse>;

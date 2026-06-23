@@ -54,6 +54,7 @@ export interface IOrderService {
   requestInvoice(orderId: string, cuit: string, userId: string): Promise<Order>;
   markAsInvoiced(orderId: string): Promise<Order>;
   findAvailableOrders(page: number, limit: number): Promise<PaginatedOrders>;
+  findRiderOrders(riderId: string, page: number, limit: number): Promise<PaginatedOrders>;
   riderPickup(orderId: string, riderId: string): Promise<Order>;
   riderDeliver(orderId: string, riderId: string, code: string): Promise<Order>;
   riderReturn(orderId: string, riderId: string): Promise<Order>;

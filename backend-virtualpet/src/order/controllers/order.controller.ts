@@ -62,6 +62,16 @@ export class OrderController {
     return this.orderService.findAvailableOrders(page, limit);
   }
 
+  @Get('assigned')
+  @Roles('RIDER' as any)
+  findRiderOrders(
+    @CurrentUser() user: User,
+    @Query('page',  new DefaultValuePipe(1),  ParseIntPipe) page:  number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.orderService.findRiderOrders(user.id, page, limit);
+  }
+
   @Get('all')
   @Roles('BACKOFFICE')
   findAllOrders(
