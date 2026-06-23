@@ -28,10 +28,14 @@ function generateDeliveryCode(): string {
 
 // Transiciones permitidas desde el panel de backoffice.
 // La progresión IN_TRANSIT → DELIVERED / NOT_DELIVERED es exclusiva del rider.
+// IN_TRANSIT y DELIVERED no tienen transiciones: solo admiten facturación.
 const BACKOFFICE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  // Recibido: marcar como preparado o cancelar.
   [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
+  // Preparado (listo en depósito): cancelar mientras nadie lo retire.
   [OrderStatus.IN_PREPARATION]: [OrderStatus.CANCELLED],
-  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED],
+  // Entrega fallida: cancelar o volver a preparar para reintentar.
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED, OrderStatus.IN_PREPARATION],
 };
 
 @Injectable()
@@ -179,8 +183,10 @@ export class OrderService implements IOrderService {
   // ─── Rider methods ────────────────────────────────────────────────────────
 
   async findAvailableOrders(page: number, limit: number) {
+    // Solo los pedidos "preparados" (listos en depósito) son retirables por un rider.
+    // Los NOT_DELIVERED deben volver a prepararse desde backoffice antes de reaparecer.
     return this.orderRepository.findOrdersByStatuses(
-      [OrderStatus.IN_PREPARATION, OrderStatus.NOT_DELIVERED],
+      [OrderStatus.IN_PREPARATION],
       page,
       limit,
     );
