@@ -19,7 +19,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     OrderModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'change-me-in-production',
-      signOptions: { expiresIn: '15m' },
+      signOptions: { expiresIn: '9h' },
     }),
   ],
   controllers: [AuthController],

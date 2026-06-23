@@ -26,7 +26,7 @@ const MAX_DELIVERY_ATTEMPTS = 3;
 const BACKOFFICE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
   [OrderStatus.IN_PREPARATION]: [OrderStatus.CANCELLED],
-  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED, OrderStatus.IN_PREPARATION],
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED],
 };
 
 @Injectable()
