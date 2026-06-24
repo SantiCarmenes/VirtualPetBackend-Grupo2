@@ -9,6 +9,7 @@ import { PaymentWebhookDto } from '../dto/payment-webhook.dto';
 import { CheckoutDto } from '../dto/checkout.dto';
 import { GuestCheckoutDto } from '../dto/guest-checkout.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import { DeliverOrderDto } from '../dto/deliver-order.dto';
 import { CHECKOUT_SERVICE } from '../interfaces/checkout-service.interface';
 import type { ICheckoutService } from '../interfaces/checkout-service.interface';
 import { ORDER_SERVICE } from '../interfaces/order-service.interface';
@@ -61,6 +62,16 @@ export class OrderController {
     return this.orderService.findAvailableOrders(page, limit);
   }
 
+  @Get('assigned')
+  @Roles('RIDER' as any)
+  findRiderOrders(
+    @CurrentUser() user: User,
+    @Query('page',  new DefaultValuePipe(1),  ParseIntPipe) page:  number,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+  ) {
+    return this.orderService.findRiderOrders(user.id, page, limit);
+  }
+
   @Get('all')
   @Roles('BACKOFFICE')
   findAllOrders(
@@ -108,6 +119,12 @@ export class OrderController {
     return this.promotionService.applyPromotion(user.id, id, dto);
   }
 
+  @Patch(':id/invoiced')
+  @Roles('BACKOFFICE')
+  markAsInvoiced(@Param('id') id: string) {
+    return this.orderService.markAsInvoiced(id);
+  }
+
   @Post(':id/pickup')
   @Roles('RIDER' as any)
   @HttpCode(HttpStatus.OK)
@@ -116,10 +133,10 @@ export class OrderController {
   }
 
   @Post(':id/deliver')
-  @Roles('RIDER' as any) 
+  @Roles('RIDER' as any)
   @HttpCode(HttpStatus.OK)
-  riderDeliver(@CurrentUser() user: User, @Param('id') id: string) {
-    return this.orderService.riderDeliver(id, user.id);
+  riderDeliver(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: DeliverOrderDto) {
+    return this.orderService.riderDeliver(id, user.id, dto.code);
   }
 
   @Post(':id/return')

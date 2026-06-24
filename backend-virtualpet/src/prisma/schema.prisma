@@ -238,6 +238,14 @@ enum OrderStatus {
   @@schema("order")
 }
 
+enum InvoiceStatus {
+  NONE
+  REQUIRED
+  DONE
+
+  @@schema("order")
+}
+
 // Sin @relation: userId es campo plano, no FK entre schemas (user schema).
 model Cart {
   id        String   @id @default(uuid())
@@ -276,6 +284,7 @@ model Order {
   status            OrderStatus @default(RECEIVED)
   deliveryAttempts  Int         @default(0) @map("delivery_attempts")
   nextDeliveryAt    DateTime?   @map("next_delivery_at")
+  deliveryCode      String?     @map("delivery_code")
   subtotal          Decimal     @db.Decimal(10, 2)
   shippingCost      Decimal     @db.Decimal(10, 2) @map("shipping_cost")
   discountTotal     Decimal     @db.Decimal(10, 2) @map("discount_total")
@@ -288,8 +297,8 @@ model Order {
   appliedPromotions AppliedPromotion[]
   statusHistory     OrderStatusHistory[]
 
-  requiresInvoice Boolean  @default(false) @map("requires_invoice")
-  invoiceCuit     String?  @map("invoice_cuit")
+  invoiceStatus   InvoiceStatus @default(NONE) @map("invoice_status")
+  invoiceCuit     String?       @map("invoice_cuit")
 
   @@index([status, nextDeliveryAt])
   @@map("order")
@@ -401,6 +410,7 @@ enum ShipmentStatus {
   PROCESSING
   SHIPPED
   DELIVERED
+  NOT_DELIVERED
 
   @@schema("shipping")
 }
@@ -423,7 +433,7 @@ model ShippingMethod {
 // riderId es campo plano, sin FK al schema user (cross-schema).
 model Shipment {
   id                String         @id @default(uuid())
-  orderId           String         @unique @map("order_id")
+  orderId           String         @map("order_id")
   methodId          String         @map("method_id")
   riderId           String?        @map("rider_id")
   takenAt           DateTime?      @map("taken_at")
@@ -435,6 +445,7 @@ model Shipment {
 
   method ShippingMethod @relation(fields: [methodId], references: [id])
 
+  @@index([orderId], map: "shipment_order_id_idx")
   @@map("shipment")
   @@schema("shipping")
 }

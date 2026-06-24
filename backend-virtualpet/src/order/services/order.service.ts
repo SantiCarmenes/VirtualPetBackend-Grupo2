@@ -21,12 +21,21 @@ import type { IOrderService, OrderStats } from '../interfaces/order-service.inte
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
+/** Código de entrega de 6 dígitos que el cliente recibe por mail al ponerse en camino. */
+function generateDeliveryCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 // Transiciones permitidas desde el panel de backoffice.
 // La progresión IN_TRANSIT → DELIVERED / NOT_DELIVERED es exclusiva del rider.
+// IN_TRANSIT y DELIVERED no tienen transiciones: solo admiten facturación.
 const BACKOFFICE_TRANSITIONS: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  // Recibido: marcar como preparado o cancelar.
   [OrderStatus.RECEIVED]:       [OrderStatus.IN_PREPARATION, OrderStatus.CANCELLED],
+  // Preparado (listo en depósito): cancelar mientras nadie lo retire.
   [OrderStatus.IN_PREPARATION]: [OrderStatus.CANCELLED],
-  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED],
+  // Entrega fallida: cancelar o volver a preparar para reintentar.
+  [OrderStatus.NOT_DELIVERED]:  [OrderStatus.CANCELLED, OrderStatus.IN_PREPARATION],
 };
 
 @Injectable()
@@ -144,7 +153,7 @@ export class OrderService implements IOrderService {
       );
     }
 
-    if (order.requiresInvoice) {
+    if (order.invoiceStatus !== 'NONE') {
       throw new BadRequestException('Este pedido ya tiene factura solicitada');
     }
 
@@ -162,14 +171,58 @@ export class OrderService implements IOrderService {
     return this.orderRepository.requestInvoice(orderId, cuit);
   }
 
+  async markAsInvoiced(orderId: string) {
+    const order = await this.orderRepository.findOrderById(orderId);
+    if (!order) throw new NotFoundException('Orden no encontrada');
+    if (order.invoiceStatus !== 'REQUIRED') {
+      throw new BadRequestException('Solo se puede facturar un pedido que requiere factura');
+    }
+    return this.orderRepository.markAsInvoiced(orderId);
+  }
+
   // ─── Rider methods ────────────────────────────────────────────────────────
 
   async findAvailableOrders(page: number, limit: number) {
+    // Solo los pedidos "preparados" (listos en depósito) son retirables por un rider.
+    // Los NOT_DELIVERED deben volver a prepararse desde backoffice antes de reaparecer.
     return this.orderRepository.findOrdersByStatuses(
-      [OrderStatus.IN_PREPARATION, OrderStatus.NOT_DELIVERED],
+      [OrderStatus.IN_PREPARATION],
       page,
       limit,
     );
+  }
+
+  // "Mis pedidos" del rider: en camino (IN_TRANSIT), entregados (DELIVERED) o
+  // devueltos (NOT_DELIVERED). Cuando backoffice cancela o vuelve a preparar, el
+  // pedido sale de estos estados y deja de aparecer automáticamente.
+  async findRiderOrders(riderId: string, page: number, limit: number) {
+    const orderIds = await this.shippingService.findOrderIdsByRiderId(riderId);
+    if (orderIds.length === 0) {
+      return { data: [], pagination: { total: 0, page, limit, pages: 0 } };
+    }
+
+    // El volumen por rider es chico: traigo todas y luego filtro por el envío
+    // más reciente (cada toma crea un envío nuevo, así un pedido reasignado a
+    // otro rider no aparece como propio).
+    const { data: orders } = await this.orderRepository.findOrdersByIdsAndStatuses(
+      orderIds,
+      [OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED, OrderStatus.NOT_DELIVERED],
+      1,
+      1000,
+    );
+
+    const withShipment: any[] = [];
+    for (const o of orders) {
+      const shipment = await this.shippingService.getShipmentByOrderId(o.id).catch(() => null);
+      if (shipment && shipment.riderId === riderId) {
+        withShipment.push({ ...o, shipment });
+      }
+    }
+
+    const total = withShipment.length;
+    const start = (page - 1) * limit;
+    const data  = withShipment.slice(start, start + limit);
+    return { data, pagination: { total, page, limit, pages: Math.ceil(total / limit) } };
   }
 
   async riderPickup(orderId: string, riderId: string) {
@@ -187,14 +240,21 @@ export class OrderService implements IOrderService {
       await this.stockService.confirmReservation(orderId);
     }
 
-    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.IN_TRANSIT, nextDeliveryAt: null });
+    // Código de entrega nuevo en cada toma: el cliente lo recibe por mail al ponerse en camino.
+    const deliveryCode = generateDeliveryCode();
+
+    const updated = await this.orderRepository.updateOrder(orderId, {
+      status: OrderStatus.IN_TRANSIT,
+      nextDeliveryAt: null,
+      deliveryCode,
+    });
     await this.orderRepository.addStatusHistory(orderId, OrderStatus.IN_TRANSIT);
-    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT);
+    void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.IN_TRANSIT, deliveryCode);
 
     return updated;
   }
 
-  async riderDeliver(orderId: string, riderId: string) {
+  async riderDeliver(orderId: string, riderId: string, code: string) {
     const order = await this.orderRepository.findOrderById(orderId);
     if (!order) throw new NotFoundException('Orden no encontrada');
     if (order.status !== OrderStatus.IN_TRANSIT) {
@@ -206,9 +266,13 @@ export class OrderService implements IOrderService {
       throw new ForbiddenException('No tenés asignada esta orden');
     }
 
+    if (!order.deliveryCode || order.deliveryCode !== code) {
+      throw new BadRequestException('Código de entrega incorrecto');
+    }
+
     void this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.DELIVERED).catch(() => {});
 
-    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.DELIVERED });
+    const updated = await this.orderRepository.updateOrder(orderId, { status: OrderStatus.DELIVERED, deliveryCode: null });
     await this.orderRepository.addStatusHistory(orderId, OrderStatus.DELIVERED);
     void this.mailService.sendOrderStatusUpdate(updated, OrderStatus.DELIVERED);
 
@@ -230,6 +294,8 @@ export class OrderService implements IOrderService {
     const newAttempts = order.deliveryAttempts + 1;
     const newStatus  = newAttempts >= MAX_DELIVERY_ATTEMPTS ? OrderStatus.CANCELLED : OrderStatus.NOT_DELIVERED;
     const updateData: Prisma.OrderUpdateInput = { status: newStatus, deliveryAttempts: newAttempts };
+
+    await this.shippingService.updateShipmentStatus(orderId, ShipmentStatusEnum.NOT_DELIVERED);
 
     const updated = await this.orderRepository.updateOrder(orderId, updateData);
     await this.orderRepository.addStatusHistory(orderId, updated.status);

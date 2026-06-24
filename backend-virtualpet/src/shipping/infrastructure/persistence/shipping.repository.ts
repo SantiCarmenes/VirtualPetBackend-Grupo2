@@ -34,23 +34,41 @@ export class ShippingRepository implements IShippingRepository {
   }
 
   findShipmentByOrderId(orderId: string) {
-    return this.p.shipment.findUnique({
+    return this.p.shipment.findFirst({
       where: { orderId },
+      orderBy: { createdAt: 'desc' },
       include: { method: true },
     });
   }
 
-  updateShipmentStatus(orderId: string, status: ShipmentStatusEnum, trackingNumber?: string) {
+  findShipmentsByOrderId(orderId: string) {
+    return this.p.shipment.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+      include: { method: true },
+    });
+  }
+
+  async findOrderIdsByRiderId(riderId: string): Promise<string[]> {
+    const rows = await this.p.shipment.findMany({
+      where: { riderId },
+      select: { orderId: true },
+      distinct: ['orderId'],
+    });
+    return rows.map((r: { orderId: string }) => r.orderId);
+  }
+
+  updateShipmentStatus(shipmentId: string, status: ShipmentStatusEnum, trackingNumber?: string) {
     return this.p.shipment.update({
-      where:   { orderId },
+      where:   { id: shipmentId },
       data:    { status, ...(trackingNumber ? { trackingNumber } : {}) },
       include: { method: true },
     });
   }
 
-  assignRider(orderId: string, riderId: string) {
+  assignRider(shipmentId: string, riderId: string) {
     return this.p.shipment.update({
-      where:   { orderId },
+      where:   { id: shipmentId },
       data:    { riderId, takenAt: new Date(), status: 'SHIPPED' },
       include: { method: true },
     });

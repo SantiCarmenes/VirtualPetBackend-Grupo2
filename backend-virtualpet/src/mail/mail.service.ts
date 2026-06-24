@@ -274,6 +274,7 @@ export class MailService {
   async sendOrderStatusUpdate(
     order: Pick<OrderMailData, 'id' | 'customerEmail' | 'customerName'>,
     newStatus: string,
+    deliveryCode?: string,
   ): Promise<void> {
     const trackUrl = `${process.env.FRONTEND_URL}/track/${order.id}`;
     const orderId  = order.id.slice(0, 8).toUpperCase();
@@ -289,6 +290,22 @@ export class MailService {
       CANCELLED:      '❌',
     };
     const icon = statusIcons[newStatus] ?? '📋';
+
+    const codeBlock = deliveryCode ? `
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;
+                  padding:24px;text-align:center;margin:24px 0 8px;">
+        <p style="margin:0 0 10px;color:#1e40af;font-size:13px;text-transform:uppercase;
+                  letter-spacing:1px;font-weight:700;">
+          Código de entrega
+        </p>
+        <span style="display:inline-block;color:#1e3a8a;font-size:34px;font-weight:800;
+                     letter-spacing:8px;font-family:'Courier New',monospace;">
+          ${deliveryCode}
+        </span>
+        <p style="margin:12px 0 0;color:#3b82f6;font-size:13px;line-height:1.6;">
+          Mostrale este código al repartidor cuando llegue para confirmar la entrega.
+        </p>
+      </div>` : '';
 
     const content = `
       <h2 class="vp-text"
@@ -325,6 +342,8 @@ export class MailService {
           ${label}
         </span>
       </div>
+
+      ${codeBlock}
 
       ${btn(trackUrl, 'Ver estado del pedido')}
       ${trackLink(trackUrl)}`;
