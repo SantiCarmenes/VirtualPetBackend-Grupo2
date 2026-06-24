@@ -91,10 +91,11 @@ export class ToolExecutor {
     input: { orderId: string },
     userId: string | undefined,
   ): Promise<string> {
+    if (!userId) return JSON.stringify({ error: 'Necesitás iniciar sesión para consultar tus pedidos' });
     try {
       const order = await this.orderService.findOrderById(input.orderId);
       if ((order as any).userId !== userId) {
-        return JSON.stringify({ error: 'No tenés acceso a ese pedido' });
+        return JSON.stringify({ error: 'Este pedido no pertenece a tu cuenta' });
       }
       const items = ((order as any).items ?? []).map((i: any) => ({
         producto:  i.productNameSnapshot,
